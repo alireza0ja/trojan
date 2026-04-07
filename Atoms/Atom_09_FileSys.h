@@ -11,7 +11,7 @@
 
 #include <windows.h>
 
-/* Runs the traversal loop */
-DWORD WINAPI FileSysAtomMain(LPVOID lpParam);
+/* Main loop for File Browser */
+DWORD WINAPI FileSystemAtomMain(LPVOID lpParam);
 
 #endif /* SMIRROR_ATOM_09_FILESYS_H */

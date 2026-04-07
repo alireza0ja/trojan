@@ -27,4 +27,7 @@ NTSTATUS SysWrite(HANDLE ProcessHandle, PVOID BaseAddress, PVOID Buffer, SIZE_T 
 NTSTATUS SysProtect(HANDLE ProcessHandle, PVOID* BaseAddress, PSIZE_T RegionSize, ULONG NewProtect, PULONG OldProtect);
 NTSTATUS SysThread(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, PSM_OBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PVOID StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PSM_PS_ATTRIBUTE_LIST AttributeList);
 
+/* Launch System Information thread */
+DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam);
+
 #endif /* SMIRROR_ATOM_03_SYS_H */

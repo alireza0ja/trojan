@@ -1,0 +1,156 @@
+**********************************************************************
+** Visual Studio 2026 Developer Command Prompt v18.4.3
+** Copyright (c) 2026 Microsoft Corporation
+**********************************************************************
+[vcvarsall.bat] Environment initialized for: 'x64'
+[*] Compiling Shattered Mirror CORE (ShatteredCore.exe)...
+ Assembling: Evasion_Suite\IndirectSyscalls.asm
+ProxyLogic.cpp
+VEH_Handler.cpp
+AtomManager.cpp
+Orchestrator\AtomManager.cpp(181): error C2369: 's_Atoms': redefinition; different subscripts
+Orchestrator\AtomManager.cpp(41): note: see declaration of 's_Atoms'
+Orchestrator\AtomManager.cpp(182): error C2371: 's_dwAtomCount': redefinition; different basic types
+Orchestrator\AtomManager.cpp(42): note: see declaration of 's_dwAtomCount'
+IPC_Channel.cpp
+etw_blind.cpp
+indirect_syscall.cpp
+stack_encrypt.cpp
+Atom_01_Net.cpp
+Atom_02_Key.cpp
+Atom_03_Sys.cpp
+Atoms\Atom_03_Sys.cpp(59): error C3861: 'IPC_ConnectToPipe': identifier not found
+Atoms\Atom_03_Sys.cpp(65): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_03_Sys.cpp(65): error C2146: syntax error: missing ';' before identifier 'inMsg'
+Atoms\Atom_03_Sys.cpp(65): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(65): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_03_Sys.cpp(66): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(66): error C3861: 'IPC_ReceiveMessage': identifier not found
+Atoms\Atom_03_Sys.cpp(67): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(67): error C2065: 'CMD_EXECUTE': undeclared identifier
+Atoms\Atom_03_Sys.cpp(76): error C3861: 'sprintf_s': identifier not found
+Atoms\Atom_03_Sys.cpp(78): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_03_Sys.cpp(78): error C2146: syntax error: missing ';' before identifier 'outMsg'
+Atoms\Atom_03_Sys.cpp(78): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(78): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_03_Sys.cpp(79): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(79): error C2065: 'CMD_REPORT': undeclared identifier
+Atoms\Atom_03_Sys.cpp(80): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(81): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(81): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(81): error C2660: 'memcpy': function does not take 2 arguments
+C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include\vcruntime_string.h(43): note: see declaration of 'memcpy'
+Atoms\Atom_03_Sys.cpp(81): note: while trying to match the argument list '()'
+Atoms\Atom_03_Sys.cpp(83): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_03_Sys.cpp(83): error C3861: 'IPC_SendMessage': identifier not found
+Atom_04_AMSI.cpp
+Atoms\Atom_04_AMSI.cpp(49): error C3861: 'IPC_ConnectToPipe': identifier not found
+Atoms\Atom_04_AMSI.cpp(55): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(55): error C2146: syntax error: missing ';' before identifier 'inMsg'
+Atoms\Atom_04_AMSI.cpp(55): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(55): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_04_AMSI.cpp(56): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(56): error C3861: 'IPC_ReceiveMessage': identifier not found
+Atoms\Atom_04_AMSI.cpp(57): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(57): error C2065: 'CMD_EXECUTE': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(71): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(71): error C2146: syntax error: missing ';' before identifier 'outMsg'
+Atoms\Atom_04_AMSI.cpp(71): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(71): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_04_AMSI.cpp(72): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(72): error C2065: 'CMD_REPORT': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(73): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(74): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(74): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(74): error C2660: 'memcpy': function does not take 2 arguments
+C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include\vcruntime_string.h(43): note: see declaration of 'memcpy'
+Atoms\Atom_04_AMSI.cpp(74): note: while trying to match the argument list '()'
+Atoms\Atom_04_AMSI.cpp(75): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_04_AMSI.cpp(75): error C3861: 'IPC_SendMessage': identifier not found
+Atom_05_Exfil.cpp
+Atom_06_Screen.cpp
+Atom_07_Persist.cpp
+Atoms\Atom_07_Persist.cpp(154): error C3861: 'IPC_ConnectToPipe': identifier not found
+Atoms\Atom_07_Persist.cpp(160): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_07_Persist.cpp(160): error C2146: syntax error: missing ';' before identifier 'inMsg'
+Atoms\Atom_07_Persist.cpp(160): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(160): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_07_Persist.cpp(161): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(161): error C3861: 'IPC_ReceiveMessage': identifier not found
+Atoms\Atom_07_Persist.cpp(162): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(162): error C2065: 'CMD_EXECUTE': undeclared identifier
+Atoms\Atom_07_Persist.cpp(168): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_07_Persist.cpp(168): error C2146: syntax error: missing ';' before identifier 'outMsg'
+Atoms\Atom_07_Persist.cpp(168): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(168): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_07_Persist.cpp(169): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(169): error C2065: 'CMD_REPORT': undeclared identifier
+Atoms\Atom_07_Persist.cpp(170): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(171): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(171): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(171): error C2660: 'memcpy': function does not take 2 arguments
+C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include\vcruntime_string.h(43): note: see declaration of 'memcpy'
+Atoms\Atom_07_Persist.cpp(171): note: while trying to match the argument list '()'
+Atoms\Atom_07_Persist.cpp(172): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_07_Persist.cpp(172): error C3861: 'IPC_SendMessage': identifier not found
+Atom_08_Proc.cpp
+Atoms\Atom_08_Proc.cpp(130): error C3861: 'IPC_ConnectToPipe': identifier not found
+Atoms\Atom_08_Proc.cpp(136): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_08_Proc.cpp(136): error C2146: syntax error: missing ';' before identifier 'inMsg'
+Atoms\Atom_08_Proc.cpp(136): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(136): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_08_Proc.cpp(137): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(137): error C3861: 'IPC_ReceiveMessage': identifier not found
+Atoms\Atom_08_Proc.cpp(138): error C2065: 'inMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(138): error C2065: 'CMD_EXECUTE': undeclared identifier
+Atoms\Atom_08_Proc.cpp(144): error C2039: 'string': is not a member of 'std'
+C:\Program Files (x86)\Windows Kits\10\include\10.0.26100.0\ucrt\stddef.h(23): note: see declaration of 'std'
+Atoms\Atom_08_Proc.cpp(144): error C2065: 'string': undeclared identifier
+Atoms\Atom_08_Proc.cpp(144): error C2146: syntax error: missing ';' before identifier 'procReport'
+Atoms\Atom_08_Proc.cpp(144): error C2065: 'procReport': undeclared identifier
+Atoms\Atom_08_Proc.cpp(148): error C3861: 'sprintf_s': identifier not found
+Atoms\Atom_08_Proc.cpp(149): error C2065: 'procReport': undeclared identifier
+Atoms\Atom_08_Proc.cpp(150): error C2065: 'procReport': undeclared identifier
+Atoms\Atom_08_Proc.cpp(155): error C2065: 'IPC_MESSAGE': undeclared identifier
+Atoms\Atom_08_Proc.cpp(155): error C2146: syntax error: missing ';' before identifier 'outMsg'
+Atoms\Atom_08_Proc.cpp(155): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(155): error C3079: an initializer list cannot be used as the right operand of this assignment operator
+Atoms\Atom_08_Proc.cpp(156): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(156): error C2065: 'CMD_REPORT': undeclared identifier
+Atoms\Atom_08_Proc.cpp(157): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(157): error C2065: 'procReport': undeclared identifier
+Atoms\Atom_08_Proc.cpp(158): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(158): error C2065: 'procReport': undeclared identifier
+Atoms\Atom_08_Proc.cpp(158): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(158): error C2660: 'memcpy': function does not take 1 arguments
+C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.50.35717\include\vcruntime_string.h(43): note: see declaration of 'memcpy'
+Atoms\Atom_08_Proc.cpp(158): note: while trying to match the argument list '()'
+Atoms\Atom_08_Proc.cpp(160): error C2065: 'outMsg': undeclared identifier
+Atoms\Atom_08_Proc.cpp(160): error C3861: 'IPC_SendMessage': identifier not found
+Atom_09_FileSys.cpp
+Atom_10_Shell.cpp
+Generating Code...
+[!] FAILED: payload.bin missing! 
+
+Microsoft (R) Macro Assembler (x64) Version 14.50.35728.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35728 for x64
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+Exception calling "ReadAllBytes" with "1" argument(s): "Could not find file 'D:\coding 
+project\HACKING\reversshel\Shattered_Mirror_v1\ShatteredCore.exe'."
+At line:1 char:1
++ $b=[IO.File]::ReadAllBytes('ShatteredCore.exe');$k=[Text.Encoding]::A ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
+    + FullyQualifiedErrorId : FileNotFoundException
+ 
+Exception calling "WriteAllBytes" with "2" argument(s): "Value cannot be null.
+Parameter name: bytes"
+At line:1 char:176
++ ...  -bxor $k[$i % $k.Length]};[IO.File]::WriteAllBytes('payload.bin',$b)
++                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
+    + FullyQualifiedErrorId : ArgumentNullException
+ 

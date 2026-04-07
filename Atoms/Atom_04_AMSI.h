@@ -12,7 +12,7 @@
 
 #include <windows.h>
 
-/* Runs the standalone AMSI blind */
-DWORD WINAPI StandaloneAmsiAtomMain(LPVOID lpParam);
+/* Launch the AMSI/ETW bypass thread */
+DWORD WINAPI AMSIBypassAtomMain(LPVOID lpParam);
 
 #endif /* SMIRROR_ATOM_04_AMSI_H */

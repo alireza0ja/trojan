@@ -13,7 +13,7 @@
 #include <windows.h>
 
 /* Setup exfiltration channel */
-DWORD WINAPI ExfilAtomMain(LPVOID lpParam);
+DWORD WINAPI ExfiltrationAtomMain(LPVOID lpParam);
 
 /* External helper: Encrypts a chunk with AES-256-GCM using bcrypt.dll */
 BOOL AesGcmEncrypt(const BYTE* pKey, const BYTE* pIv, const BYTE* pPlaintext, DWORD dwPlainLen, BYTE* pCiphertext, BYTE* pTag);

