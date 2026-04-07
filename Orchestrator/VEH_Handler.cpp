@@ -24,6 +24,9 @@
 #include "../Evasion_Suite/include/common.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
 
+// Forward declaration to resolve top-to-bottom compilation error
+BOOL RegisterAMSIDllWatch(void);
+
 /*---------------------------------------------------------------------------
  *  AMSI result codes
  *-------------------------------------------------------------------------*/

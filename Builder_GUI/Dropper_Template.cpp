@@ -1,4 +1,4 @@
-﻿#include <windows.h>
+#include <windows.h>
 #include <shellapi.h>
 #include <Shlobj.h>
 #include <string>
@@ -166,7 +166,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             si.wShowWindow = SW_HIDE;
 
             if (CreateProcessW(hostDst.c_str(), NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                char msg[100]; sprintf(msg, "[+] Host started PID: %d", pi.th32ProcessID);
+                char msg[100]; sprintf(msg, "[+] Host started PID: %d", pi.dwProcessId);
                 RuntimeLog(msg);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
