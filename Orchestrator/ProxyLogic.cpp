@@ -11,7 +11,6 @@
 #include "../Evasion_Suite/include/indirect_syscall.h"
 #include "../Evasion_Suite/include/etw_blind.h"
 #include "AtomManager.h"
-#include "EvasionSuite.h"
 #include "Logger.h"
 #include "Config.h"
 #include "MasterCatcher.h"

