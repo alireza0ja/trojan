@@ -1,0 +1,100 @@
+<Window x:Class="ShatteredMirror_Builder.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Shattered Mirror Builder" Height="600" Width="800"
+        Background="#1E1E1E">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="150"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Text="SHATTERED MIRROR (v1) - PAYLOAD GENERATOR" 
+                   Foreground="#00FF00" FontSize="20" FontWeight="Bold" 
+                   HorizontalAlignment="Center" Margin="0,10,0,20"/>
+
+        <!-- C2 Configuration -->
+        <Border Grid.Row="1" BorderBrush="#333333" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="C2 Configuration" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
+                
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Domain/IP:" Foreground="White" VerticalAlignment="Center"/>
+                    <TextBox x:Name="txtDomain" Grid.Column="1" Text="c2.attacker.com" Margin="0,0,0,5" Background="#333333" Foreground="White"/>
+                </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Port:" Foreground="White" VerticalAlignment="Center"/>
+                    <TextBox x:Name="txtPort" Grid.Column="1" Text="443" Margin="0,0,0,5" Background="#333333" Foreground="White"/>
+                </Grid>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="PSK Seed:" Foreground="White" VerticalAlignment="Center"/>
+                    <TextBox x:Name="txtSeed" Grid.Column="1" Text="SuperSecretSeedForClient001" Margin="0,0,0,5" Background="#333333" Foreground="White"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Decoy Selection -->
+        <Border Grid.Row="2" BorderBrush="#333333" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="Decoy File (The Lure)" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="80"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Target File:" Foreground="White" VerticalAlignment="Center"/>
+                    <TextBox x:Name="txtDecoy" Grid.Column="1" Margin="0,0,5,0" Background="#333333" Foreground="White" IsReadOnly="True" Text="Drop or select file..."/>
+                    <Button x:Name="btnBrowse" Grid.Column="2" Content="Browse" Background="#444444" Foreground="White" Click="BtnBrowse_Click"/>
+                </Grid>
+                <TextBlock Text="* The payload will be embedded into this file. Extension will be spoofed." Foreground="#AAAAAA" FontStyle="Italic" Margin="0,5,0,0" FontSize="11"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Atom Selection -->
+        <Border Grid.Row="3" BorderBrush="#333333" BorderThickness="1" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <TextBlock Text="Module Selection (Atoms)" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
+                <WrapPanel>
+                    <CheckBox Content="Network (01)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
+                    <CheckBox Content="SysLink (03)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Keylogger (02)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Exfil (05)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Screen (06)" IsChecked="False" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Persistence (07)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="Process Inj. (08)" IsChecked="True" Foreground="White" Margin="5"/>
+                    <CheckBox Content="FileSys (09)" IsChecked="False" Foreground="White" Margin="5"/>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Generate Button -->
+        <Button Grid.Row="4" x:Name="btnGenerate" Content="COMPILE PAYLOAD" 
+                Background="#333333" Foreground="#00FF00" FontSize="16" FontWeight="Bold" 
+                Height="40" Click="BtnGenerate_Click"/>
+
+        <!-- Build Logs -->
+        <Border Grid.Row="5" BorderBrush="#333333" BorderThickness="1" Padding="5" Margin="0,10,0,0">
+            <TextBox x:Name="txtLogs" Background="#111111" Foreground="#00FF00" FontFamily="Consolas" 
+                     IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="Compiler ready..."/>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,3 @@
+101 RCDATA "Builder_GUI\\decoy.bin"
+102 RCDATA "payload.bin"
+1 RT_MANIFEST "Builder_GUI\\app.manifest"

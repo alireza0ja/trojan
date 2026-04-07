@@ -1,0 +1,9 @@
+LIBRARY "uxtheme.dll"
+EXPORTS
+    CloseThemeData      = _proxy_CloseThemeData      @1
+    DrawThemeBackground = _proxy_DrawThemeBackground @2
+    IsThemeActive       = _proxy_IsThemeActive       @3
+    OpenThemeData       = _proxy_OpenThemeData       @4
+    SetWindowTheme      = _proxy_SetWindowTheme      @5
+    GetThemeColor       = _proxy_GetThemeColor       @6
+    GetThemePartSize    = _proxy_GetThemePartSize    @7

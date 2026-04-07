@@ -1,0 +1,41 @@
+# Visual Studio
+.vs/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# C#
+bin/
+obj/
+
+# C++
+*.exe
+*.dll
+*.pdb
+*.obj
+*.lib
+*.exp
+*.ilk
+*.aps
+*.ncb
+*.sdf
+*.ipch
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# Others
+.DS_Store
+Thumbs.db
