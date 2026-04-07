@@ -280,6 +280,7 @@ BOOL InitSyscallTable(PSYSCALL_TABLE pTable) {
     /* Step 3: Find syscall;ret gadget */
     PVOID pGadget = FindSyscallGadget(pTable->pNtdllBase, pTable->dwNtdllSize);
     if (!pGadget) return FALSE;
+    pTable->SyscallAddress = pGadget;
 
     /* Step 4: Define which functions we need */
     DWORD targetHashes[] = {
@@ -336,6 +337,10 @@ BOOL InitSyscallTable(PSYSCALL_TABLE pTable) {
                 break;
             }
         }
+    }
+
+    if (pTable->SyscallAddress == NULL) {
+        return FALSE;
     }
 
     return (pTable->dwCount == nTargets);

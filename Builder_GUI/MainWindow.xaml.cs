@@ -38,7 +38,7 @@ namespace ShatteredMirror_Builder
 
                 if (success)
                 {
-                    MessageBox.Show("Compilation successful! Output saved in project root.", 
+                    MessageBox.Show("Compilation successful! Output saved in 'Output' folder.", 
                                     "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else

@@ -1,4 +1,4 @@
-﻿#include <windows.h>
+#include <windows.h>
 #include <shellapi.h>
 #include <Shlobj.h>
 #include <string>

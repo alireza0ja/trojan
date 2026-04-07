@@ -153,6 +153,7 @@ typedef struct _SYSCALL_TABLE {
     DWORD         dwCount;
     PVOID         pNtdllBase;     /* Cached ntdll base address */
     DWORD         dwNtdllSize;    /* Size of ntdll image       */
+    PVOID         SyscallAddress; /* THE master gadget address  */
 } SYSCALL_TABLE, *PSYSCALL_TABLE;
 
 #endif /* SMIRROR_COMMON_H */
