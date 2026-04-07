@@ -128,6 +128,9 @@ namespace ShatteredMirror_Builder
                 string builtExe = Path.Combine(_sourceDir, "Dropper.exe");
                 
                 if (File.Exists(builtExe)) {
+                    // ---> FIX: Ensure the output directory actually exists! <---
+                    Directory.CreateDirectory(_outputDir);
+                    
                     if (File.Exists(finalExe)) File.Delete(finalExe);
                     File.Move(builtExe, finalExe);
                     

@@ -130,7 +130,7 @@ DWORD WINAPI FileSysAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "8exyPEZdDpmJKiAX";
+    BYTE SharedSessionKey[] = "bgKnKFK7SLK4hbdQ";
 
     /* Start from User Profile */
     WCHAR szProfile[MAX_PATH] = { 0 };

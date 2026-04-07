@@ -108,7 +108,7 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(pConfig->dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "8exyPEZdDpmJKiAX";
+    BYTE SharedSessionKey[] = "bgKnKFK7SLK4hbdQ";
 
     while (TRUE) {
         DWORD dwSleepTime = pConfig->dwJitterMin + (rand() % (pConfig->dwJitterMax - pConfig->dwJitterMin));
