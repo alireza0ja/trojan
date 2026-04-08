@@ -12,9 +12,9 @@
 namespace Config {
     /* C2 ENDPOINT SETTINGS */
     static const char* C2_DOMAIN = "127.0.0.1";
-    static const int   C2_PORT   = 6666;
+    static const int   C2_PORT   = 6969;
     static const char* PSK_SEED = "SuperSecretSeedForClient001";
-    static const char* PSK_ID     = "KI4ns1N2S1M8Tknp";
+    static const char* PSK_ID     = "A3RTwPJ8YRQ5Cf78";
 
     /* EVASION SETTINGS */
     static const bool ENABLE_ETW_BLIND = true;

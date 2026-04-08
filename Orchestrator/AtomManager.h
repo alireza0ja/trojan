@@ -29,6 +29,7 @@ typedef enum _ATOM_COMMAND_ID {
 typedef struct _IPC_MESSAGE {
     DWORD           dwSignature;  /* 0x534D4952 "SMIR" */
     ATOM_COMMAND_ID CommandId;
+    DWORD           AtomId;       /* Target Atom ID for routing (e.g., 10 for Shell) */
     DWORD           dwPayloadLen;
     BYTE            Payload[MAX_IPC_PAYLOAD_SIZE];
 } IPC_MESSAGE, *PIPC_MESSAGE;

