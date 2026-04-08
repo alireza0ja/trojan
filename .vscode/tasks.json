@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "MIRROR SCAN (RE-SYNC ALL)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-Command",
+                "Get-ChildItem -Recurse -Include *.cpp,*.h,*.cs,*.py,*.asm | ForEach-Object { (Get-Item $_.FullName).LastWriteTime = Get-Date }"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            }
+        },
+        {
+            "label": "MIRROR: TOTAL WAR (OPEN ALL & SCAN)",
+            "type": "shell",
+            "command": "powershell",
+            "args": [
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File",
+                "d:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\open_mirror.ps1"
+            ],
+            "problemMatcher": [],
+            "presentation": {
+                "echo": true,
+                "reveal": "never",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "detail": "Runs the rapid-fire opener script to force-open 100+ tabs without hanging the terminal."
+        }
+    ]
+}

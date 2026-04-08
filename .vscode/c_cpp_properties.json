@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "Shattered Mirror",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/Atoms/include",
+                "${workspaceFolder}/Evasion_Suite/include",
+                "${workspaceFolder}/Orchestrator/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "WIN32_LEAN_AND_MEAN"
+            ],
+            "windowsSdkVersion": "10.0.22621.0",
+            "compilerPath": "cl.exe",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "windows-msvc-x64"
+        }
+    ],
+    "version": 4
+}

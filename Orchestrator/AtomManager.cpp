@@ -24,7 +24,6 @@
 #include "../Atoms/Atom_09_FileSys.h"
 #include <cstdio>
 #include <string>
-#include <vector>
 #include <winhttp.h>
 
 #pragma comment(lib, "winhttp.lib")

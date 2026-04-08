@@ -1,7 +1,4 @@
-#include "../Evasion_Suite/include/common.h"
 #include "AtomManager.h"
-#include "Logger.h"
-#include "Config.h"
 #include <windows.h>
 #include <cstdio>
 
