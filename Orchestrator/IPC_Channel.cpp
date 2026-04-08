@@ -60,7 +60,7 @@ HANDLE IPC_CreateServerPipe(DWORD dwAtomId) {
     while (retries > 0) {
         hPipe = CreateNamedPipeW(
             szPipeName,
-            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE, 
+            PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE, 
             PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
             1, MAX_IPC_PAYLOAD_SIZE + sizeof(IPC_MESSAGE), 
             MAX_IPC_PAYLOAD_SIZE + sizeof(IPC_MESSAGE), 0, NULL
@@ -88,15 +88,25 @@ HANDLE IPC_ConnectToPipe(DWORD dwAtomId) {
     WCHAR szPipeName[128];
     wsprintfW(szPipeName, PIPE_NAME_FORMAT, dwAtomId);
 
-    HANDLE hPipe = CreateFileW(
-        szPipeName,
-        GENERIC_READ | GENERIC_WRITE,
-        0,
-        NULL,
-        OPEN_EXISTING,
-        0,
-        NULL
-    );
+    HANDLE hPipe = INVALID_HANDLE_VALUE;
+    int retries = 50; // Try for 5 seconds total
+
+    while (retries > 0) {
+        if (WaitNamedPipeW(szPipeName, 100)) {
+            hPipe = CreateFileW(
+                szPipeName,
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                NULL,
+                OPEN_EXISTING,
+                0,
+                NULL
+            );
+            if (hPipe != INVALID_HANDLE_VALUE) break;
+        }
+        Sleep(100);
+        retries--;
+    }
 
     if (hPipe == INVALID_HANDLE_VALUE) {
         return NULL;
@@ -124,8 +134,8 @@ BOOL IPC_SendMessage(HANDLE hPipe, PIPC_MESSAGE pMsg, BYTE* pEncKey, DWORD dwKey
         pMsg->dwPayloadLen = MAX_IPC_PAYLOAD_SIZE;
     }
 
-    /* Total size to send: Header (12 bytes) + Payload length */
-    DWORD dwTotalSize = 12 + pMsg->dwPayloadLen;
+    /* Total size to send: Header (16 bytes) + Payload length */
+    DWORD dwTotalSize = 16 + pMsg->dwPayloadLen;
 
     /* Encrypt the payload IN PLACE before sending */
     if (pMsg->dwPayloadLen > 0) {
@@ -158,7 +168,7 @@ BOOL IPC_ReceiveMessage(HANDLE hPipe, PIPC_MESSAGE pMsg, BYTE* pEncKey, DWORD dw
        it will read the exact message sent if the buffer is large enough. */
     BOOL bSuccess = ReadFile(hPipe, pMsg, sizeof(IPC_MESSAGE), &dwRead, NULL);
 
-    if (!bSuccess || dwRead < 12) { /* 12 is size of headers */
+    if (!bSuccess || dwRead < 16) { /* 16 is size of headers */
         return FALSE;
     }
 

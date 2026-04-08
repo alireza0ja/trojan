@@ -14,7 +14,7 @@ namespace Config {
     static const char* C2_DOMAIN = "127.0.0.1";
     static const int   C2_PORT   = 6969;
     static const char* PSK_SEED = "SuperSecretSeedForClient001";
-    static const char* PSK_ID     = "A3RTwPJ8YRQ5Cf78";
+    static const char* PSK_ID     = "LdRrpJFuq4uq1smR";
 
     /* EVASION SETTINGS */
     static const bool ENABLE_ETW_BLIND = true;
