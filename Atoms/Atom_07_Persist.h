@@ -15,6 +15,6 @@
 DWORD WINAPI PersistenceAtomMain(LPVOID lpParam);
 
 /* Internal COM helper */
-BOOL CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath);
+HRESULT CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath);
 
 #endif /* SMIRROR_ATOM_07_PERSIST_H */

@@ -1,3 +1,31 @@
-101 RCDATA "Builder_GUI\\decoy.bin"
+#include <windows.h>
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 10,0,19041,1
+ PRODUCTVERSION 10,0,19041,1
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "Shattered Workspace"
+            VALUE "FileDescription", "Shattered Core Utility"
+            VALUE "FileVersion", "10.0.19041.1 (WinBuild.160101.0800)"
+            VALUE "InternalName", "ShatteredCore.exe"
+            VALUE "LegalCopyright", "© Shattered Workspace. All rights reserved."
+            VALUE "OriginalFilename", "ShatteredCore.exe"
+            VALUE "ProductName", "Microsoft® Windows® Operating System"
+            VALUE "ProductVersion", "10.0.19041.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
 102 RCDATA "payload.bin"
 1 RT_MANIFEST "Builder_GUI\\app.manifest"

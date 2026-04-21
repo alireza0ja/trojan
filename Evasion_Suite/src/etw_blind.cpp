@@ -20,7 +20,7 @@ typedef struct _ETW_REG_ENTRY {
 } ETW_REG_ENTRY, *PETW_REG_ENTRY;
 
 /* GUID for Microsoft-Windows-Threat-Intelligence (high detection risk) */
-static const GUID g_ThreatIntelGuid = { 0xf41113ba, 0x1f5d, 0x47e0, { 0xad, 0x95, 0x18, 0x61, 0x4d, 0x63, 0xff, 0xaf } };
+static const GUID g_ThreatIntelGuid = { 0xF4E1897A, 0xBB5D, 0x5A14, { 0x87, 0x64, 0xDA, 0x96, 0x20, 0xC0, 0x82, 0x54 } };
 
 /* 
  * Instead of patching EtwEventWrite, we simply search the RegistrationList 

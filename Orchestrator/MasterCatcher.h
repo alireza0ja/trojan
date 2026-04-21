@@ -5,7 +5,7 @@
 /* * Universal public path. 
  * Even high-privilege system processes or low-privilege apps can write here.
  */
-static const char* g_LogPath = "C:\\Users\\Public\\Shattered_Master_Debug.txt";
+static const char* g_LogPath = "log\\Shattered_Master_Debug.txt";
 static char g_CurrentProcessName[MAX_PATH] = "Unknown";
 static DWORD g_CurrentPID = 0;
 
@@ -14,7 +14,7 @@ inline void ForceLogUniversal(const char* format, ...) {
     /* * GLOBAL MUTEX: This prevents Notepad and TaskManager from 
      * trying to write to the file at the exact same time and corrupting it.
      */
-    HANDLE hMutex = CreateMutexA(NULL, FALSE, "Global\\ShatteredGodModeMutex");
+    HANDLE hMutex = CreateMutexA(NULL, FALSE, "Global\\WinSvcLogMtx_7A3B");
     if (hMutex) {
         WaitForSingleObject(hMutex, INFINITE); // Wait in line
         
