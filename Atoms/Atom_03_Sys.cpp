@@ -134,10 +134,15 @@ DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam) {
     lstrcpyA(szUserName, "UNKNOWN");
   }
 
+  // Get actual architecture
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  const char* arch = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) ? "x64" : "x86";
+
   char report[1024];
   sprintf_s(report,
-            "[SYS_INFO] User: %s | Host: %s | CPU: x64 | Integrity: SYSTEM",
-            szUserName, szComputerName);
+            "[SYS_INFO] User: %s | Host: %s | Arch: %s | Status: ACTIVE",
+            szUserName, szComputerName, arch);
   printf("[Atom 3] Immediate report: %s\n", report);
 
   IPC_MESSAGE outMsg = {0};
@@ -167,10 +172,14 @@ DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam) {
           GetComputerNameA(szHost, &dwHLen);
           GetUserNameA(szUsr, &dwULen);
 
+          SYSTEM_INFO si;
+          GetSystemInfo(&si);
+          const char* arch = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) ? "x64" : "x86";
+
           char freshReport[1024];
           sprintf_s(freshReport,
-                    "[SYS_INFO] User: %s | Host: %s | CPU: x64 | Integrity: SYSTEM",
-                    szUsr, szHost);
+                    "[SYS_INFO] User: %s | Host: %s | Arch: %s | Status: ACTIVE",
+                    szUsr, szHost, arch);
 
           IPC_MESSAGE rptMsg = {0};
           rptMsg.dwSignature = 0x534D4952;

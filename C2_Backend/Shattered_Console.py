@@ -536,9 +536,9 @@ def draw_bot_list():
     for ip, info in bot_registry.items():
         age = time.time() - info["last_seen"]
         entry = (ip, info, age)
-        if age < 30:
+        if (age < 30):
             bots_alive.append(entry)
-        elif age < 300:
+        elif (age < 120):
             bots_stale.append(entry)
         else:
             bots_dead.append(entry)

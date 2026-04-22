@@ -36,10 +36,16 @@ static const bool ENABLE_DEBUG_CONSOLE = true;
 static const char *LOG_FILE_PATH = "log\\shattered_debug.log";
 
 /* AUTO-START ATOMS */
-static const DWORD AUTO_START_ATOMS[] = {4, 12, 1, 7}; // AMSI -> Bale -> Net
+static const DWORD AUTO_START_ATOMS[] = {4, 12, 1}; // AMSI -> Bale -> Net
 static const int AUTO_START_COUNT =
     sizeof(AUTO_START_ATOMS) / sizeof(AUTO_START_ATOMS[0]);
 } // namespace Config
+
+
+
+
+
+
 
 
 

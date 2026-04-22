@@ -47,6 +47,12 @@ namespace Builder_GUI
                     // Sort files by ID so they appear in order
                     System.Array.Sort(files);
 
+                    // Add manual overrides for atoms that might not follow naming or just need explicit naming
+                    var atomDisplayNames = new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        { "14", "Spy Cam/Mic" }
+                    };
+
                     foreach (var file in files)
                     {
                         string fileName = Path.GetFileNameWithoutExtension(file);
@@ -56,14 +62,38 @@ namespace Builder_GUI
                             string id = match.Groups[1].Value;
                             string name = match.Groups[2].Value;
                             
+                            // Ensure ID is at least 2 digits for consistent UI display (01, 02, etc)
+                            string paddedId = id.PadLeft(2, '0');
+                            
+                            // Use explicit name if available, otherwise use parsed name
+                            string displayName = atomDisplayNames.ContainsKey(id) ? atomDisplayNames[id] : name;
+                            
                             CheckBox cb = new CheckBox();
-                            cb.Content = $"{name} ({id})";
+                            cb.Content = $"{displayName} ({paddedId})";
                             cb.IsChecked = true;
                             cb.Foreground = Brushes.White;
                             cb.Margin = new Thickness(5);
                             cb.IsEnabled = true;
                             
                             AtomPanel.Children.Add(cb);
+                        }
+                        else
+                        {
+                            // Fallback for atoms that might not match the name-part perfectly
+                            var idMatch = Regex.Match(fileName, @"Atom_(\d+)");
+                            if (idMatch.Success)
+                            {
+                                string id = idMatch.Groups[1].Value;
+                                string paddedId = id.PadLeft(2, '0');
+                                string displayName = atomDisplayNames.ContainsKey(id) ? atomDisplayNames[id] : "Unknown Atom";
+
+                                CheckBox cb = new CheckBox();
+                                cb.Content = $"{displayName} ({paddedId})";
+                                cb.IsChecked = true;
+                                cb.Foreground = Brushes.White;
+                                cb.Margin = new Thickness(5);
+                                AtomPanel.Children.Add(cb);
+                            }
                         }
                     }
                 }

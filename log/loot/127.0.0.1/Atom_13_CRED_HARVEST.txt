@@ -1,0 +1,12 @@
+
+--- 2026-04-22 04:42:15 ---
+[CREDS] === Shattered Mirror Credential Harvest ===
+[CREDS] Chrome: FOUND!
+[CREDS]   Master key decrypted (32 bytes).
+[CREDS]   Login Data sent (94208 bytes).
+[CREDS]   Cookies captured (1048576 bytes).
+[CREDS] Edge: FOUND!
+[CREDS]   Master key decrypted (32 bytes).
+[CREDS]   Login Data sent (51200 bytes).
+[CREDS] Brave: Not installed.
+

@@ -1,0 +1,346 @@
+
+[Atom 3] Started. Atom ID: 3
+[Atom 3] Connected to command pipe.
+[Atom 3] Connected to report pipe.
+[Atom 3] InitSyslink called.
+Wed Apr 22 04:37:04 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 3 | Report Pipe: 2492 | Command Pipe: 1412
+[Atom 3] Sent CMD_READY.
+[Atom 3] Immediate report: [SYS_INFO] User: Mozi | Host: DESKTOP-0CR3HGN | Arch: x64 | Status: ACTIVE
+[Atom 3] Immediate IPC send successful.
+Wed Apr 22 04:37:05 2026 | [*] INFO     | Received cmd=7 from Atom 3
+Wed Apr 22 04:37:05 2026 | [*] INFO     | Received CMD_READY from Atom 3
+Wed Apr 22 04:37:05 2026 | [*] INFO     | Received cmd=3 from Atom 3
+Wed Apr 22 04:37:05 2026 | [*] INFO     | REPORT from Atom 3, size: 74
+[Atom 3] Received CMD_EXECUTE. Re-collecting sysinfo.
+[Atom 3] Fresh sysinfo sent.
+Wed Apr 22 04:37:05 2026 | [*] INFO     | Received cmd=3 from Atom 3
+Wed Apr 22 04:37:05 2026 | [*] INFO     | REPORT from Atom 3, size: 74
+Wed Apr 22 04:37:15 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:37:15 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 4:CHECK
+Wed Apr 22 04:37:15 2026 | [*] INFO     | Atom 4 already running. Sending command.
+Wed Apr 22 04:37:15 2026 | [*] INFO     | Queued command for Atom 4: CHECK
+Wed Apr 22 04:37:15 2026 | [*] INFO     | Received cmd=3 from Atom 4
+Wed Apr 22 04:37:15 2026 | [*] INFO     | REPORT from Atom 4, size: 63
+Wed Apr 22 04:37:21 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:37:21 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 4:CHECK
+Wed Apr 22 04:37:21 2026 | [*] INFO     | Atom 4 already running. Sending command.
+Wed Apr 22 04:37:21 2026 | [*] INFO     | Queued command for Atom 4: CHECK
+Wed Apr 22 04:37:21 2026 | [*] INFO     | Received cmd=3 from Atom 4
+Wed Apr 22 04:37:21 2026 | [*] INFO     | REPORT from Atom 4, size: 63
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 6:RUN
+Wed Apr 22 04:37:35 2026 | [+] SUCCESS  | Initiating ATOM 6 Deployment...
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Queued command for Atom 6: RUN
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Telemetry bridge established for Atom 6
+Wed Apr 22 04:37:35 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 6 | Report Pipe: 2672 | Command Pipe: 2440
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Received cmd=7 from Atom 6
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Received CMD_READY from Atom 6
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:35 2026 | [*] INFO     | REPORT from Atom 6, size: 29
+Wed Apr 22 04:37:35 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:35 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:36 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:36 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:36 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:36 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:36 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:36 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:36 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:36 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:36 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:36 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:37 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:37 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:37 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:37 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:37 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:37 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:37 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:37 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:37:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:37:40 2026 | [*] INFO     | REPORT from Atom 6, size: 1304
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 6:RUN
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Atom 6 already running. Sending command.
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Queued command for Atom 6: RUN
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:38 2026 | [*] INFO     | REPORT from Atom 6, size: 29
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:38 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:38 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:39 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:39 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:40 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:40 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:41 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:41 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:41 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:41 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:41 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:41 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:41 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:41 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:41 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:41 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:42 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:42 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:42 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:42 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:42 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:42 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:42 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:42 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:43 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:43 2026 | [*] INFO     | REPORT from Atom 6, size: 12272
+Wed Apr 22 04:38:43 2026 | [*] INFO     | Received cmd=3 from Atom 6
+Wed Apr 22 04:38:43 2026 | [*] INFO     | REPORT from Atom 6, size: 1315
+Wed Apr 22 04:38:51 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:38:51 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 6:LIVE
+Wed Apr 22 04:38:51 2026 | [*] INFO     | Atom 6 already running. Sending command.
+Wed Apr 22 04:38:51 2026 | [*] INFO     | Queued command for Atom 6: LIVE
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 7:START
+Wed Apr 22 04:39:07 2026 | [+] SUCCESS  | Initiating ATOM 7 Deployment...
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Queued command for Atom 7: START
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Telemetry bridge established for Atom 7
+Wed Apr 22 04:39:07 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 7 | Report Pipe: 2908 | Command Pipe: 2300
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Received cmd=7 from Atom 7
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Received CMD_READY from Atom 7
+Wed Apr 22 04:39:07 2026 | [*] INFO     | Received cmd=3 from Atom 7
+Wed Apr 22 04:39:07 2026 | [*] INFO     | REPORT from Atom 7, size: 64
+Wed Apr 22 04:39:56 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:39:56 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 5:D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots\\screenshots_20260422_043843.png
+Wed Apr 22 04:39:56 2026 | [+] SUCCESS  | Initiating ATOM 5 Deployment...
+Wed Apr 22 04:39:56 2026 | [*] INFO     | Queued command for Atom 5: D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots\\screenshots_20260422_043843.png
+Wed Apr 22 04:39:56 2026 | [*] INFO     | Telemetry bridge established for Atom 5
+=== Atom 05 RAW PIPE VERSION ===
+[Atom 5] Connected to command pipe. Handle: 0000000000000BC4
+[Atom 5] Connected to report pipe. Handle: 000000000000077C
+Wed Apr 22 04:39:57 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 5 | Report Pipe: 2864 | Command Pipe: 2748
+[Atom 5] CMD_READY sent.
+[Atom 5] Waiting for CMD_EXECUTE...
+Wed Apr 22 04:39:57 2026 | [*] INFO     | Received cmd=7 from Atom 5
+Wed Apr 22 04:39:57 2026 | [*] INFO     | Received CMD_READY from Atom 5
+[Atom 5] Received CMD_EXECUTE: D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots\\screenshots_20260422_043843.png
+[Atom 5] File size: 259027 bytes, 64 chunks (Starting at 0)
+[Atom 5] META sent: META:D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots\\screenshots_20260422_043843.png:64
+Wed Apr 22 04:39:57 2026 | [*] INFO     | Received cmd=6 from Atom 5
+Wed Apr 22 04:39:57 2026 | [*] INFO     | Received cmd=6 from Atom 5
+Wed Apr 22 04:40:08 2026 | [*] INFO     | Received cmd=6 from Atom 5
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 8:121548
+Wed Apr 22 04:40:17 2026 | [+] SUCCESS  | Initiating ATOM 8 Deployment...
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Queued command for Atom 8: 121548
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Telemetry bridge established for Atom 8
+Wed Apr 22 04:40:17 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 8 | Report Pipe: 1476 | Command Pipe: 696
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Received cmd=7 from Atom 8
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Received CMD_READY from Atom 8
+Wed Apr 22 04:40:17 2026 | [*] INFO     | Received cmd=3 from Atom 8
+Wed Apr 22 04:40:17 2026 | [*] INFO     | REPORT from Atom 8, size: 3801
+Wed Apr 22 04:40:19 2026 | [*] INFO     | Received cmd=6 from Atom 5
+Wed Apr 22 04:40:30 2026 | [*] INFO     | Received cmd=6 from Atom 5
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 9:D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|||VALIDATE
+Wed Apr 22 04:40:38 2026 | [+] SUCCESS  | Initiating ATOM 9 Deployment...
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Queued command for Atom 9: D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|||VALIDATE
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Telemetry bridge established for Atom 9
+Wed Apr 22 04:40:38 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 9 | Report Pipe: 2496 | Command Pipe: 2592
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Received cmd=7 from Atom 9
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Received CMD_READY from Atom 9
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:40:38 2026 | [*] INFO     | REPORT from Atom 9, size: 119
+Wed Apr 22 04:40:38 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:40:38 2026 | [*] INFO     | REPORT from Atom 9, size: 83
+Wed Apr 22 04:40:41 2026 | [*] INFO     | Received cmd=6 from Atom 5
+[Atom 5] Failed to get ACK for chunk 0 after 5 retries. Aborting.
+[Atom 5] Transfer finished. Sent 0 bytes
+Wed Apr 22 04:40:52 2026 | [*] INFO     | Received cmd=3 from Atom 5
+Wed Apr 22 04:40:52 2026 | [*] INFO     | REPORT from Atom 5, size: 6
+Wed Apr 22 04:41:15 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:41:15 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 9:D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|PNG||SMART_EXFIL
+Wed Apr 22 04:41:15 2026 | [*] INFO     | Atom 9 already running. Sending command.
+Wed Apr 22 04:41:15 2026 | [*] INFO     | Queued command for Atom 9: D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|PNG||SMART_EXFIL
+Wed Apr 22 04:41:15 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:15 2026 | [*] INFO     | REPORT from Atom 9, size: 119
+Wed Apr 22 04:41:15 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:15 2026 | [*] INFO     | REPORT from Atom 9, size: 83
+Wed Apr 22 04:41:27 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:41:27 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 9:D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|||VALIDATE
+Wed Apr 22 04:41:27 2026 | [*] INFO     | Atom 9 already running. Sending command.
+Wed Apr 22 04:41:27 2026 | [*] INFO     | Queued command for Atom 9: D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|||VALIDATE
+Wed Apr 22 04:41:27 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:27 2026 | [*] INFO     | REPORT from Atom 9, size: 119
+Wed Apr 22 04:41:27 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:27 2026 | [*] INFO     | REPORT from Atom 9, size: 83
+Wed Apr 22 04:41:41 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:41:41 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 9:D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|||
+Wed Apr 22 04:41:41 2026 | [*] INFO     | Atom 9 already running. Sending command.
+Wed Apr 22 04:41:41 2026 | [*] INFO     | Queued command for Atom 9: D:\\coding project\\HACKING\\reversshel\\Shattered_Mirror_v1\\log\\loot\\127.0.0.1\\screenshots|||
+Wed Apr 22 04:41:42 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:42 2026 | [*] INFO     | REPORT from Atom 9, size: 119
+Wed Apr 22 04:41:42 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:42 2026 | [*] INFO     | REPORT from Atom 9, size: 127
+Wed Apr 22 04:41:42 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:42 2026 | [*] INFO     | REPORT from Atom 9, size: 127
+Wed Apr 22 04:41:42 2026 | [*] INFO     | Received cmd=3 from Atom 9
+Wed Apr 22 04:41:42 2026 | [*] INFO     | REPORT from Atom 9, size: 83
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 13:START
+Wed Apr 22 04:41:52 2026 | [+] SUCCESS  | Initiating ATOM 13 Deployment...
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Queued command for Atom 13: START
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Telemetry bridge established for Atom 13
+Wed Apr 22 04:41:52 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 13 | Report Pipe: 3056 | Command Pipe: 2204
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received cmd=7 from Atom 13
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received CMD_READY from Atom 13
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received cmd=3 from Atom 13
+Wed Apr 22 04:41:52 2026 | [*] INFO     | REPORT from Atom 13, size: 44
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:52 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:53 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:53 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:53 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:53 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:54 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:54 2026 | [*] INFO     | Received cmd=3 from Atom 13
+Wed Apr 22 04:41:54 2026 | [*] INFO     | REPORT from Atom 13, size: 44
+Wed Apr 22 04:41:54 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:54 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:54 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:55 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:55 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:55 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:55 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:56 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:56 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:56 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:56 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:56 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:57 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:57 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:57 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:57 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:58 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:58 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:58 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:58 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:58 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:59 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:59 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:59 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:41:59 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:00 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:00 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:00 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:00 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:00 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:01 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:01 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:01 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:01 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:02 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:02 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:02 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:02 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:02 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:03 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:03 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:03 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:03 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:04 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:04 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:04 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:04 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:04 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:05 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:05 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:05 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:05 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:06 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:06 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:06 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:06 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:06 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:07 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:07 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:07 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:07 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:07 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:08 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:08 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:08 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:08 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:09 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:09 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:09 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:09 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:09 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:10 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:10 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:10 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:10 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:11 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:11 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:11 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:11 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:11 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:12 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:12 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:12 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:12 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:13 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:13 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:13 2026 | [*] INFO     | Received cmd=3 from Atom 13
+Wed Apr 22 04:42:13 2026 | [*] INFO     | REPORT from Atom 13, size: 42
+Wed Apr 22 04:42:13 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:13 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:14 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:14 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:14 2026 | [*] INFO     | Received cmd=6 from Atom 13
+Wed Apr 22 04:42:14 2026 | [*] INFO     | Received cmd=3 from Atom 13
+Wed Apr 22 04:42:14 2026 | [*] INFO     | REPORT from Atom 13, size: 338
+Wed Apr 22 04:45:00 2026 | [*] INFO     | Received cmd=5 from Atom 1
+Wed Apr 22 04:45:00 2026 | [*] INFO     | Received CMD_SPAWN_ATOM from Atom 1: 10:START
+Wed Apr 22 04:45:00 2026 | [+] SUCCESS  | Initiating ATOM 10 Deployment...
+Wed Apr 22 04:45:00 2026 | [*] INFO     | Queued command for Atom 10: START
+Wed Apr 22 04:45:00 2026 | [*] INFO     | Telemetry bridge established for Atom 10
+Wed Apr 22 04:45:00 2026 | [+] SUCCESS  | IPC Bridges ONLINE for Atom 10 | Report Pipe: 1828 | Command Pipe: 2428
+Wed Apr 22 04:45:00 2026 | [*] INFO     | Received cmd=7 from Atom 10
+Wed Apr 22 04:45:00 2026 | [*] INFO     | Received CMD_READY from Atom 10

