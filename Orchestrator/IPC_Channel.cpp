@@ -8,25 +8,41 @@
 #include "AtomManager.h"
 #include <cstdarg>
 #include <cstdio>
+#include "Config.h"
 
 #define PIPE_NAME_FORMAT_REPORT L"\\\\.\\pipe\\SM_%08X_R"
 #define PIPE_NAME_FORMAT_CMD L"\\\\.\\pipe\\SM_%08X_C"
 
 static void IPCTrace(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
   int len = vsnprintf(buf, sizeof(buf), format, args);
   va_end(args);
+  
   if (len > 0 && len < sizeof(buf)) {
     buf[len] = '\n';
     buf[len + 1] = '\0';
     OutputDebugStringA(buf);
   }
+
+  SYSTEMTIME st;
+  GetLocalTime(&st);
+  char timeStr[32];
+  sprintf_s(timeStr, "[%02d:%02d:%02d.%03d]", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+
   FILE *f = fopen("log\\ipc_debug.txt", "a");
   if (f) {
-    fprintf(f, "[%lu] %s\n", GetTickCount(), buf);
+    fprintf(f, "%s %s\n", timeStr, buf);
     fclose(f);
+  }
+
+  // Dedicated Traffic Log for user's "time to time" request
+  FILE *tf = fopen("log\\ipc_traffic.log", "a");
+  if (tf) {
+    fprintf(tf, "%s %s\n", timeStr, buf);
+    fclose(tf);
   }
 }
 
@@ -112,8 +128,8 @@ HANDLE IPC_CreateReportServerPipe(DWORD dwAtomId) {
   wsprintfW(szPipeName, PIPE_NAME_FORMAT_REPORT, dwAtomId);
   HANDLE hPipe = CreateNamedPipeW(
       szPipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
-      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, sizeof(IPC_MESSAGE),
-      sizeof(IPC_MESSAGE), 0, NULL);
+      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 65536,
+      65536, 0, NULL);
   if (hPipe == INVALID_HANDLE_VALUE) {
     IPCTrace("CreateReportServerPipe(%lu) FAILED, error=%lu", dwAtomId,
              GetLastError());
@@ -128,8 +144,8 @@ HANDLE IPC_CreateCommandServerPipe(DWORD dwAtomId) {
   wsprintfW(szPipeName, PIPE_NAME_FORMAT_CMD, dwAtomId);
   HANDLE hPipe = CreateNamedPipeW(
       szPipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
-      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, sizeof(IPC_MESSAGE),
-      sizeof(IPC_MESSAGE), 0, NULL);
+      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 65536,
+      65536, 0, NULL);
   if (hPipe == INVALID_HANDLE_VALUE) {
     IPCTrace("CreateCommandServerPipe(%lu) FAILED, error=%lu", dwAtomId,
              GetLastError());
@@ -202,18 +218,23 @@ BOOL IPC_SendMessage(HANDLE hPipe, PIPC_MESSAGE pMsg, BYTE *pEncKey,
     if (!RC4_Buffer(pMsg->Payload, pMsg->dwPayloadLen, pEncKey, dwKeyLen))
       return FALSE;
   }
-  IPCTrace("SendMessage: writing %lu bytes to pipe %p (cmd=%d, payload=%lu)",
-           dwTotalSize, hPipe, pMsg->CommandId, pMsg->dwPayloadLen);
+  IPCTrace("[TRAFFIC] SEND_START | Pipe=%p | Cmd=%d | Payload=%lu",
+           hPipe, pMsg->CommandId, pMsg->dwPayloadLen);
+  ULONGLONG start = GetTickCount64();
   BOOL bSuccess = WriteExactly(hPipe, pMsg, dwTotalSize);
+  ULONGLONG end = GetTickCount64();
   DWORD err = GetLastError();
+
   if (pMsg->dwPayloadLen > 0)
     RC4_Buffer(pMsg->Payload, pMsg->dwPayloadLen, pEncKey, dwKeyLen);
+
   if (!bSuccess) {
-    IPCTrace("SendMessage: WriteExactly failed, error=%lu", err);
+    IPCTrace("[TRAFFIC] SEND_FAIL | Pipe=%p | Duration=%llums | Error=%lu", 
+             hPipe, end - start, err);
     return FALSE;
   }
-  IPCTrace("SendMessage: sent %lu bytes successfully via handle %p.",
-           dwTotalSize, hPipe);
+  IPCTrace("[TRAFFIC] SEND_COMPLETE | Pipe=%p | Duration=%llums",
+           hPipe, end - start);
   return TRUE;
 }
 
@@ -221,37 +242,36 @@ BOOL IPC_ReceiveMessage(HANDLE hPipe, PIPC_MESSAGE pMsg, BYTE *pEncKey,
                         DWORD dwKeyLen) {
   if (!hPipe || !pMsg || !pEncKey)
     return FALSE;
-  IPCTrace("ReceiveMessage: reading header from pipe %p", hPipe);
+  IPCTrace("[TRAFFIC] RECV_START | Pipe=%p | Waiting for header...", hPipe);
+  ULONGLONG start = GetTickCount64();
   if (!ReadExactly(hPipe, pMsg, 16)) {
-    IPCTrace("ReceiveMessage: failed to read header, error=%lu",
-             GetLastError());
+    IPCTrace("[TRAFFIC] RECV_FAIL_HEADER | Pipe=%p | Error=%lu",
+             hPipe, GetLastError());
     return FALSE;
   }
   if (pMsg->dwSignature != 0x534D4952) {
-    IPCTrace("ReceiveMessage: invalid signature 0x%08X on pipe %p",
-             pMsg->dwSignature, hPipe);
+    IPCTrace("[TRAFFIC] RECV_INVALID_SIG | Pipe=%p | Sig=0x%08X",
+             hPipe, pMsg->dwSignature);
     return FALSE;
   }
   if (pMsg->dwPayloadLen > MAX_IPC_PAYLOAD_SIZE) {
-    IPCTrace("ReceiveMessage: payload length %lu exceeds max",
-             pMsg->dwPayloadLen);
+    IPCTrace("[TRAFFIC] RECV_OVERSIZE | Pipe=%p | Size=%lu",
+             hPipe, pMsg->dwPayloadLen);
     return FALSE;
   }
   if (pMsg->dwPayloadLen > 0) {
-    IPCTrace("ReceiveMessage: reading %lu payload bytes from pipe %p",
-             pMsg->dwPayloadLen, hPipe);
     if (!ReadExactly(hPipe, pMsg->Payload, pMsg->dwPayloadLen)) {
-      IPCTrace("ReceiveMessage: failed to read payload, error=%lu",
-               GetLastError());
+      IPCTrace("[TRAFFIC] RECV_FAIL_PAYLOAD | Pipe=%p | Size=%lu",
+               hPipe, pMsg->dwPayloadLen);
       return FALSE;
     }
     if (!RC4_Buffer(pMsg->Payload, pMsg->dwPayloadLen, pEncKey, dwKeyLen)) {
-      IPCTrace("ReceiveMessage: decryption failed on pipe %p", hPipe);
+      IPCTrace("[TRAFFIC] RECV_CRYPT_FAIL | Pipe=%p", hPipe);
       return FALSE;
     }
   }
-  IPCTrace("ReceiveMessage: received cmd=%d, payload=%lu bytes successfully "
-           "via handle %p",
-           pMsg->CommandId, pMsg->dwPayloadLen, hPipe);
+  ULONGLONG end = GetTickCount64();
+  IPCTrace("[TRAFFIC] RECV_COMPLETE | Pipe=%p | Cmd=%d | Size=%lu | Duration=%llums",
+           hPipe, pMsg->CommandId, pMsg->dwPayloadLen, end - start);
   return TRUE;
 }

@@ -13,6 +13,7 @@
 #pragma comment(lib, "comsupp.lib")
 
 static void PersistDebug(const char *format, ...) {
+    if (!Config::LOGGING_ENABLED) return;
     char buf[512];
     va_list args;
     va_start(args, format);

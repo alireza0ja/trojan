@@ -35,8 +35,9 @@
                         <TextBlock Text="C2 Port:" Foreground="White" Margin="0,0,0,5"/>
                         <TextBox x:Name="txtPort" Text="6969" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10"/>
                         
-                        <TextBlock Text="Session Seed:" Foreground="White" Margin="0,0,0,5"/>
-                        <TextBox x:Name="txtSeed" Text="SuperSecretSeedForClient001" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10"/>
+
+                        <TextBlock Text="PSK ID (Optional):" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBox x:Name="txtPskId" Text="" Tag="Randomized if empty" Background="#222222" Foreground="White" BorderBrush="#444444" Padding="5" Margin="0,0,0,10" ToolTip="The 16-character session key. Leave empty for a random one."/>
                     </StackPanel>
                 </Border>
 

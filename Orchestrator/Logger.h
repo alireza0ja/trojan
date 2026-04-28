@@ -5,6 +5,7 @@
 #include <iostream>
 #include <vector>
 #include <ctime>
+#include "Config.h"
 
 /* Categories for logging */
 enum LogCategory {
@@ -13,7 +14,9 @@ enum LogCategory {
     INFO,
     VERIFY,
     NETWORK,
-    ATOM_EVENT
+    ATOM_EVENT,
+    TURBO_PULSE,
+    MESH_SYNC
 };
 
 class Logger {
@@ -62,6 +65,7 @@ private:
     }
 
     void LogInternal(LogCategory cat, const std::string& msg) {
+        if (!Config::LOGGING_ENABLED) return;
         std::string tag;
         switch (cat) {
             case SUCCESS:    tag = "[+] SUCCESS "; break;
@@ -70,6 +74,8 @@ private:
             case VERIFY:     tag = "[?] VERIFY  "; break;
             case NETWORK:    tag = "[N] NETWORK "; break;
             case ATOM_EVENT: tag = "[A] ATOM    "; break;
+            case TURBO_PULSE:tag = "[T] TURBO   "; break;
+            case MESH_SYNC: tag = "[M] MESH    "; break;
         }
 
         time_t now = time(0);

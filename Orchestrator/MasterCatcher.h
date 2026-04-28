@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <stdio.h>
+#include "Config.h"
 
 /* * Universal public path. 
  * Even high-privilege system processes or low-privilege apps can write here.
@@ -11,6 +12,9 @@ static DWORD g_CurrentPID = 0;
 
 /* Thread-Safe, Cross-Process Universal Logger */
 inline void ForceLogUniversal(const char* format, ...) {
+    // Check global toggle from Config.h
+    if (!Config::LOGGING_ENABLED) return;
+
     /* * GLOBAL MUTEX: This prevents Notepad and TaskManager from 
      * trying to write to the file at the exact same time and corrupting it.
      */

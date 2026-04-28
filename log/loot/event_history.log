@@ -1,0 +1,17 @@
+[17:07:10] Config loaded: PUBLIC=6767 FLASK=6970 SHELL=4444
+[17:07:11] Flask started on port 6970
+[17:07:11] Turbo Listener started on port 5556
+[17:07:11] Bouncer launched on port 6767
+[17:07:12] NEW IMPLANT connected: 151.235.222.136
+[17:07:12] Console ONLINE — awaiting implant connections
+[17:07:20] PING queued for 151.235.222.136
+[17:07:20] TASK dispatched to 151.235.222.136: PING
+[17:07:52] PING queued for 151.235.222.136
+[17:07:52] TASK dispatched to 151.235.222.136: PING
+[17:08:08] SHELL task queued for 151.235.222.136
+[17:08:08] TASK dispatched to 151.235.222.136: REVERSE SHELL
+[17:08:08] LOOT from 151.235.222.136: ACK:10
+[17:08:17] SYSTEM RECON queued for 151.235.222.136
+[17:08:18] TASK dispatched to 151.235.222.136: SYSTEM RECON
+[17:08:36] KEYLOGGER queued for 151.235.222.136
+[17:08:37] TASK dispatched to 151.235.222.136: KEYLOGGER

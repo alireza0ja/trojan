@@ -13,6 +13,7 @@
 
 /* Debug logging to C:\Users\Public\proc_debug.txt */
 static void ProcDebug(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);

@@ -13,7 +13,7 @@
 /*---------------------------------------------------------------------------
  * IPC Command Structures
  *-------------------------------------------------------------------------*/
-#define MAX_IPC_PAYLOAD_SIZE 12288
+#define MAX_IPC_PAYLOAD_SIZE 65536
 
 typedef enum _ATOM_COMMAND_ID {
   CMD_HEARTBEAT = 0x01,
@@ -23,7 +23,9 @@ typedef enum _ATOM_COMMAND_ID {
   CMD_SPAWN_ATOM = 0x05,     // Bale bot requests atom spawn
   CMD_FORWARD_REPORT = 0x06, // Orchestrator forwards atom output to Bale
   CMD_READY = 0x07,          // Atom signals it is ready to receive commands
-  CMD_REPORT_ACK = 0x08      // Acknowledgement that a report was received
+  CMD_REPORT_ACK = 0x08,     // Acknowledgement that a report was received
+  CMD_BALE_REPORT = 0x09,    // Telegram-bound binary/structured report
+  CMD_STOP_ALL = 0x0A        // Kill all non-core task atoms
 } ATOM_COMMAND_ID;
 
 typedef struct _IPC_MESSAGE {
@@ -55,6 +57,7 @@ typedef struct _ATOM_RECORD {
   DWORD dwLastHeartbeat; /* Tick count of last received heartbeat */
   BOOL bBaleRouted;      /* TRUE if output goes to Bale bot */
   HANDLE hBalePipe;      /* Pipe handle to Bale bot (if routed) */
+  DWORD OwnerAtomId;     /* ID of the atom that spawned this one (0 = Orchestrator) */
   char pendingCommand[MAX_IPC_PAYLOAD_SIZE]; /* Command to send when atom is
                                                 ready (fallback) */
   DWORD pendingCommandLen;                   /* Length of pending command */

